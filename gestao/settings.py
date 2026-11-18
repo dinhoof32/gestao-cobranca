@@ -71,13 +71,22 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "gestao.wsgi.application"
 
-# Banco: SQLite por padrão (simples e sem manutenção); PostgreSQL em produção via DATABASE_URL.
-DATABASES = {
-    "default": dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'dados' / 'db.sqlite3'}",
-        conn_max_age=600,
-    )
-}
+# Banco de dados
+# - Sem DATABASE_URL: SQLite em ./dados (zero configuração).
+# - Com DATABASE_URL: PostgreSQL, por exemplo o Supabase gratuito. Use a connection string do
+#   "Session pooler" (porta 5432) do painel do Supabase (Connect → Session pooler).
+_db_url = os.getenv("DATABASE_URL", "").strip()
+if _db_url:
+    _supabase = "supabase.co" in _db_url or "supabase.com" in _db_url
+    DATABASES = {"default": dj_database_url.parse(
+        _db_url, conn_max_age=60, conn_health_checks=True,
+        ssl_require=_supabase or env_bool("DATABASE_SSL", False))}
+    if ":6543" in _db_url:
+        # "Transaction pooler" do Supabase não suporta cursores do lado do servidor
+        DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
+else:
+    DATABASES = {"default": dj_database_url.parse(f"sqlite:///{BASE_DIR / 'dados' / 'db.sqlite3'}")}
+    DATABASES["default"]["OPTIONS"] = {"timeout": 30}
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

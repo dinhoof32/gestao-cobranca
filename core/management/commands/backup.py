@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from django.conf import settings
+from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection
 from django.utils import timezone
@@ -41,13 +42,24 @@ class Command(BaseCommand):
                 copia.close()
             elif "postgresql" in db["ENGINE"]:
                 dump = tmp / "db.sql"
-                env = {"PGPASSWORD": db.get("PASSWORD") or ""}
-                cmd = ["pg_dump", "-h", db.get("HOST") or "localhost", "-p", str(db.get("PORT") or 5432),
-                       "-U", db.get("USER") or "", "-f", str(dump), db["NAME"]]
-                r = subprocess.run(cmd, env={**env, "PATH": "/usr/bin:/bin:/usr/local/bin"},
-                                   capture_output=True, text=True)
-                if r.returncode != 0:
-                    raise CommandError(f"pg_dump falhou: {r.stderr}")
+                env = {"PGPASSWORD": db.get("PASSWORD") or "", "PATH": "/usr/bin:/bin:/usr/local/bin",
+                       "PGSSLMODE": (db.get("OPTIONS") or {}).get("sslmode", "prefer")}
+                cmd = ["pg_dump", "--no-owner", "--no-privileges", "-h", db.get("HOST") or "localhost",
+                       "-p", str(db.get("PORT") or 5432), "-U", db.get("USER") or "", "-f", str(dump), db["NAME"]]
+                try:
+                    r = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=600)
+                    ok = r.returncode == 0
+                    erro = r.stderr
+                except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+                    ok, erro = False, str(exc)
+                if not ok:
+                    # pg_dump ausente ou de versão diferente do servidor: exporta pelo próprio Django
+                    self.stderr.write(f"pg_dump indisponível ({erro.strip()[:200]}); usando exportação JSON.")
+                    dump = tmp / "db.json"
+                    with open(dump, "w", encoding="utf-8") as f:
+                        call_command("dumpdata", "--natural-foreign", "--natural-primary",
+                                     "--exclude=contenttypes", "--exclude=auth.permission",
+                                     "--exclude=sessions", stdout=f)
             else:
                 raise CommandError("Banco não suportado para backup automático.")
 

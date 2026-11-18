@@ -1,0 +1,5 @@
+# HTTPS automático e gratuito (Let's Encrypt). DOMINIO vem do .env (ex.: 129-146-10-20.sslip.io)
+{$DOMINIO} {
+	encode gzip
+	reverse_proxy web:8000
+}

@@ -49,17 +49,66 @@ e no `.env` do sistema: `GATEWAY_URL=http://localhost:3000` e o mesmo `GATEWAY_T
 Para rodar a régua manualmente: `python manage.py processar_cobrancas`
 Para rodar os testes: `python manage.py test core`
 
-## Colocar em produção (recomendado: VPS de ~R$ 30/mês + Docker)
+## Colocar no ar 100% grátis
 
-1. Copie o projeto para o servidor e crie o `.env` a partir do `.env.example` (gere uma `SECRET_KEY` longa).
-2. `docker compose up -d --build`
-3. Coloque um proxy com HTTPS na frente (o mais simples é o **Caddy**: `gestao.seudominio.com.br { reverse_proxy 127.0.0.1:8000 }`).
-4. `docker compose exec web python manage.py createsuperuser` (um usuário para você, outro para sua esposa).
-5. Ative a verificação em duas etapas em **Minha conta**.
+O sistema precisa de um computador **ligado 24 horas** (para enviar nos horários certos e manter o
+WhatsApp conectado). Custo zero com:
 
-Depois, conecte o WhatsApp pelo QR Code (seção abaixo). O serviço `agendador` roda a régua a cada 30 minutos e gera o backup diário às 02h em `dados/backups/`.
-**Copie os backups para fora do servidor** (ex.: `rclone sync dados/backups gdrive:backups-gestao` no cron).
-Para restaurar: extraia o `.tar.gz`, coloque o `db.sqlite3` e a pasta `arquivos/` em `dados/`.
+| Peça | Serviço gratuito | Observação |
+|---|---|---|
+| Servidor | **Oracle Cloud – Always Free** | Máquina virtual gratuita para sempre. Pede cartão só para verificar identidade; contas *Always Free* não são cobradas |
+| Banco de dados | **Supabase – Free** (opcional) | 500 MB, sobra para anos de uso. Sem ele, o banco fica no próprio servidor (SQLite) |
+| HTTPS / endereço | **sslip.io + Let's Encrypt** | Endereço `https://SEU-IP.sslip.io` com certificado automático |
+
+### 1. Criar o servidor gratuito (Oracle Cloud)
+
+1. Crie a conta em **cloud.oracle.com** → *Sign up* (escolha a região **Brazil East (São Paulo)**).
+2. *Compute → Instances → Create instance*:
+   - **Image:** Canonical Ubuntu 24.04
+   - **Shape:** *Ampere* `VM.Standard.A1.Flex` com 1 OCPU e 6 GB (gratuito). Se não houver vaga, use
+     `VM.Standard.E2.1.Micro` (também gratuito; o instalador cria memória swap).
+   - Baixe a chave SSH oferecida.
+3. Na instância criada: *Subnet → Security List → Add Ingress Rules*: origem `0.0.0.0/0`, TCP, portas
+   **80** e **443**.
+4. Conecte: `ssh -i chave.key ubuntu@IP-DO-SERVIDOR`.
+
+### 2. (Opcional) Criar o banco no Supabase
+
+1. Em **supabase.com**, *New project* (região São Paulo) e guarde a senha do banco.
+2. Clique em **Connect → Session pooler** e copie a connection string, trocando `[YOUR-PASSWORD]` pela senha.
+   (Use o *Session pooler*: a conexão direta do plano gratuito é só IPv6.)
+
+Vantagem: os dados ficam fora do servidor, com backups do próprio Supabase. Projetos gratuitos sem
+atividade por 7 dias são pausados; como o sistema consulta o banco a cada 30 minutos, ele se mantém ativo.
+
+### 3. Instalar (automático)
+
+No servidor:
+
+```bash
+sudo apt-get update && sudo apt-get install -y git gh
+```
+```bash
+gh auth login
+```
+```bash
+gh repo clone dinhoof32/gestao-cobranca && cd gestao-cobranca
+```
+```bash
+sudo bash instalar.sh
+```
+
+O instalador instala o Docker, libera o firewall, gera senhas aleatórias, pergunta a connection string
+do Supabase (ENTER para pular), sobe tudo com HTTPS e cria seu usuário. No final mostra o endereço de acesso.
+
+**Atualizar depois:** `git pull && sudo docker compose up -d --build`
+
+**Backups:** diários às 02h em `dados/backups/` (banco + PDFs + comprovantes). Com Supabase, o banco
+também tem o backup do próprio Supabase. Para copiar os backups para o Google Drive gratuito, use `rclone`.
+Restauração: `db.sql` com `psql`, ou `db.json` com `python manage.py loaddata db.json`.
+
+> Alternativa sem nuvem: qualquer computador seu que fique ligado (Linux, ou Windows com Docker Desktop)
+> roda o mesmo `docker compose up -d`.
 
 ## Conectar o WhatsApp pelo QR Code (sem custo)
 

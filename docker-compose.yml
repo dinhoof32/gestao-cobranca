@@ -1,7 +1,7 @@
 # web:       sistema (Django)
 # agendador: régua de cobrança a cada 30 min + backup diário às 02h
 # gateway:   conexão do WhatsApp por QR Code (sessão salva em ./dados/whatsapp-sessao)
-# Coloque um proxy com HTTPS na frente do "web" (ex.: Caddy).
+# caddy:     HTTPS automático e gratuito na frente do sistema
 services:
   web:
     build: .
@@ -28,4 +28,13 @@ services:
       INTERVALO_MIN_SEG: ${INTERVALO_MIN_SEG:-20}
       INTERVALO_MAX_SEG: ${INTERVALO_MAX_SEG:-45}
     volumes: ["./dados/whatsapp-sessao:/app/sessao"]
+    restart: unless-stopped
+  caddy:
+    image: caddy:2.8.4
+    env_file: .env
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./dados/caddy:/data
+    depends_on: [web]
     restart: unless-stopped

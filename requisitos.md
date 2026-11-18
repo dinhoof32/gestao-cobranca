@@ -123,3 +123,8 @@ Padrões adotados para perguntas ainda não respondidas (todos ajustáveis em Co
 - Mitigações: chip dedicado (recomendado), intervalo aleatório 20–45 s, simulação de digitação,
   horário comercial, apenas clientes cadastrados, verificação do número antes do envio.
 - API oficial mantida como opção (WHATSAPP_PROVEDOR=oficial).
+
+## Hospedagem custo zero (18/11/2026)
+- Titular não quer custo algum. Solução: Oracle Cloud Always Free (servidor 24h) + Supabase Free
+  (PostgreSQL, opcional) + sslip.io/Let's Encrypt (HTTPS). Instalador automático `instalar.sh`.
+- Supabase não hospeda o gateway do WhatsApp (precisa de processo contínuo): por isso o servidor é necessário.
