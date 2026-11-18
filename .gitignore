@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 gateway/node_modules/
 gateway/sessao/
+exemplo-carne-*.pdf

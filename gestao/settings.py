@@ -163,6 +163,17 @@ WHATSAPP = {
     "SIMULACAO": env_bool("WHATSAPP_SIMULACAO", False),
 }
 
+# ---------- Modo de pré-visualização (SOMENTE para testes, nunca em produção) ----------
+# Permite abrir o sistema dentro do painel de pré-visualização (HTTPS por proxy, dentro de iframe).
+MODO_PREVIEW = DEBUG and env_bool("MODO_PREVIEW", False)
+if MODO_PREVIEW:
+    MIDDLEWARE = [m for m in MIDDLEWARE if "XFrameOptions" not in m]
+    MIDDLEWARE[MIDDLEWARE.index("django.middleware.csrf.CsrfViewMiddleware")] = "core.middleware.CsrfPreviewMiddleware"
+    ALLOWED_HOSTS = ["*"]
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SAMESITE = CSRF_COOKIE_SAMESITE = "None"
+    SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = True
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

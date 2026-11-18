@@ -2,12 +2,14 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from core.models import Cliente, Cobranca, LancamentoSocio
 from core.services import cobrancas as svc
+from core.services import demo_pdf
 from core.services.linha_digitavel import decodificar, montar_linha
 
 
@@ -36,7 +38,7 @@ class Command(BaseCommand):
                 cob = Cobranca(cliente=cli, competencia=mes, vencimento=venc, valor=Decimal(mens),
                                linha_digitavel=decodificar(linha).formatada)
                 cob.congelar_valores()
-                cob.pdf.save("b.pdf", ContentFile(b"%PDF-1.4\n% demo\n"), save=False)
+                cob.pdf.save("b.pdf", ContentFile(demo_pdf.gerar([linha], cli.nome, cli.documento)), save=False)
                 cob.status = Cobranca.VENCIDA if venc < hoje else Cobranca.AGENDADA
                 cob.save()
                 if venc < hoje - timedelta(days=3) and not (i in (2, 5) and delta == -1) and not (i == 4 and delta == 0):
@@ -47,4 +49,11 @@ class Command(BaseCommand):
                                        data=hoje - timedelta(days=4), descricao="PIX do sócio")
         Cliente.objects.filter(nome__startswith="Auto").update(situacao_licenca=Cliente.LIC_BLOQUEADO)
         svc.processar_regua(enviar=False)
-        self.stdout.write(self.style.SUCCESS("Dados de demonstração criados."))
+        # carnê de exemplo (próximo ano, 3 boletos por página) para testar a importação
+        cli = Cliente.objects.get(nome="Padaria Pão Quente")
+        ano = hoje.year + 1
+        linhas = [montar_linha("237", "00001" + "1" * 20, hoje.replace(year=ano, month=m, day=10), cli.mensalidade)
+                  for m in range(1, 13)]
+        destino = settings.BASE_DIR / "dados" / f"exemplo-carne-padaria-{ano}.pdf"
+        destino.write_bytes(demo_pdf.gerar(linhas, cli.nome, cli.documento, por_pagina=3))
+        self.stdout.write(self.style.SUCCESS(f"Dados de demonstração criados. Carnê de exemplo: {destino}"))
