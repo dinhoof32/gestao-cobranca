@@ -1,14 +1,22 @@
 # Gestão de Suporte e Cobrança
 
-Sistema para automatizar o envio mensal de boletos pelo **WhatsApp (API oficial da Meta)**, controlar
-pagamentos e acompanhar a **conta corrente com o sócio**.
+Sistema para automatizar o envio mensal de boletos pelo **WhatsApp**, controlar pagamentos e
+acompanhar a **conta corrente com o sócio**.
+
+O WhatsApp pode ser conectado de duas formas (troca em `WHATSAPP_PROVEDOR` no `.env`):
+
+| | **QR Code** (padrão) | **API oficial da Meta** |
+|---|---|---|
+| Custo | Zero | Cobrança por mensagem |
+| Como conecta | Escaneia o QR Code em *Configurações* | Cadastro na Meta + templates aprovados |
+| Risco | **Não oficial: a Meta pode bloquear o número** | Sem risco de bloqueio |
 
 ## O que o sistema faz
 
 | Área | Funcionalidades |
 |---|---|
 | **Boletos** | Importa PDFs (inclusive o **carnê do ano inteiro**), lê linha digitável, valor e vencimento, confere os dígitos verificadores, identifica o cliente pelo CPF/CNPJ e recorta páginas com vários boletos |
-| **Régua automática** | Envia o boleto **2 dias antes** do vencimento e um lembrete **4 dias depois**, se não estiver pago. Respeita horário comercial, nunca duplica e **nunca cobra boleto pago ou cancelado** (rechecagem com bloqueio no banco imediatamente antes do envio) |
+| **Régua automática** | Envia o boleto (PDF anexado) **2 dias antes** do vencimento e um lembrete **4 dias depois**, se não estiver pago. Respeita horário comercial, nunca duplica e **nunca cobra boleto pago ou cancelado** (rechecagem com bloqueio no banco imediatamente antes do envio) |
 | **Pagamentos** | Comprovante do cliente (recebido automaticamente pelo WhatsApp) = "pagamento informado": pausa os lembretes, mas **não dá baixa**. A baixa só acontece por confirmação do sócio (link de conferência) ou registrada por você, sempre com origem e auditoria |
 | **Repasse** | `Sua parte = (mensalidade − custo do sistema) × %`, configurável por cliente. Os valores ficam congelados em cada cobrança, então alterar o cadastro não muda o passado |
 | **Conta com o sócio** | Crédito automático da sua parte a cada pagamento confirmado; registro dos PIX (qualquer valor); saldo sempre atualizado; distribuição FIFO mostrando quais mensalidades já foram repassadas; extrato para enviar ao sócio |
@@ -28,8 +36,15 @@ python manage.py dados_demo               # opcional: dados fictícios para conh
 python manage.py runserver
 ```
 
-Acesse http://localhost:8000. Sem credenciais da Meta, o WhatsApp fica em **modo simulação**: tudo é
-registrado, mas nada é enviado.
+Acesse http://localhost:8000. Sem o gateway configurado, o WhatsApp fica em **modo simulação**: tudo é
+registrado, mas nada é enviado. Para testar o QR Code localmente, em outro terminal:
+
+```bash
+cd gateway && npm install
+GATEWAY_TOKEN=um-token-com-16-ou-mais WEBHOOK_URL=http://localhost:8000/webhook/gateway/ node index.mjs
+```
+
+e no `.env` do sistema: `GATEWAY_URL=http://localhost:3000` e o mesmo `GATEWAY_TOKEN`.
 
 Para rodar a régua manualmente: `python manage.py processar_cobrancas`
 Para rodar os testes: `python manage.py test core`
@@ -42,35 +57,55 @@ Para rodar os testes: `python manage.py test core`
 4. `docker compose exec web python manage.py createsuperuser` (um usuário para você, outro para sua esposa).
 5. Ative a verificação em duas etapas em **Minha conta**.
 
-O serviço `agendador` roda a régua a cada 30 minutos e gera o backup diário às 02h em `dados/backups/`.
+Depois, conecte o WhatsApp pelo QR Code (seção abaixo). O serviço `agendador` roda a régua a cada 30 minutos e gera o backup diário às 02h em `dados/backups/`.
 **Copie os backups para fora do servidor** (ex.: `rclone sync dados/backups gdrive:backups-gestao` no cron).
 Para restaurar: extraia o `.tar.gz`, coloque o `db.sqlite3` e a pasta `arquivos/` em `dados/`.
 
-## Configurar o WhatsApp oficial (Cloud API)
+## Conectar o WhatsApp pelo QR Code (sem custo)
+
+1. No `.env`, deixe `WHATSAPP_PROVEDOR=qrcode` e defina um `GATEWAY_TOKEN` longo (`openssl rand -hex 32`).
+2. Suba tudo com `docker compose up -d --build`. O serviço `gateway` mantém a conexão com o WhatsApp.
+3. No sistema, abra **Configurações**. Vai aparecer um **QR Code**.
+4. No celular: **WhatsApp → ⋮ → Dispositivos conectados → Conectar dispositivo** e aponte para o QR Code.
+5. Pronto: o status muda para **Conectado**. A sessão fica salva em `dados/whatsapp-sessao/`, então não é
+   preciso escanear de novo, nem depois de reiniciar o servidor.
+
+O celular **não precisa ficar ligado**: o WhatsApp funciona como "dispositivo conectado". Se a sessão for
+encerrada (por exemplo, removida pelo celular), o painel mostra o alerta e um novo QR Code aparece em
+Configurações. Enquanto estiver desconectado, a régua **não envia e não perde nada**: retoma sozinha
+quando o número for reconectado.
+
+**Comprovantes:** quando o cliente envia uma foto ou PDF, o sistema anexa à cobrança em aberto, pausa o
+lembrete e cria a tarefa "conferir com o sócio". Não dá baixa sozinho.
+
+### ⚠ Risco de bloqueio e como o sistema reduz esse risco
+
+A conexão por QR Code usa o WhatsApp Web, que **não é um canal oficial para automação**. A Meta pode
+suspender números que considerar automatizados, e um bloqueio não tem como ser revertido pelo sistema. Proteções aplicadas:
+
+- intervalo aleatório de **20 a 45 s** entre mensagens (`INTERVALO_MIN_SEG` / `INTERVALO_MAX_SEG`);
+- simula "digitando…" antes de cada envio;
+- só envia em horário comercial e em dias úteis (configurável);
+- só envia para clientes cadastrados, no máximo 1 boleto + 1 lembrete por mês;
+- confere se o número tem WhatsApp antes de enviar.
+
+**Recomendação:** use um **chip dedicado às cobranças**, não o seu número pessoal. Peça aos clientes para
+salvarem o contato: mensagens para quem tem o número salvo e responde têm risco bem menor.
+
+Os textos das mensagens são editáveis em **Configurações** (variáveis `{nome}`, `{competencia}`,
+`{valor}`, `{vencimento}`, `{linha}`, `{empresa}`).
+
+## (Opcional) API oficial da Meta
+
+Para trocar depois para o canal oficial, sem risco de bloqueio:
 
 1. Crie uma conta em **business.facebook.com** com o CNPJ e verifique a empresa.
 2. Em **developers.facebook.com**, crie um app do tipo *Business* e adicione o produto **WhatsApp**.
-3. Adicione o número:
-   - **Manter o número atual:** converta-o primeiro para o app *WhatsApp Business* e conecte pelo
-     fluxo de "coexistência" (o app continua funcionando no celular). Confira os requisitos atuais da Meta na hora de fazer.
-   - **Número novo:** um chip dedicado à empresa (mais simples).
-4. Crie um **usuário do sistema** no Business Manager e gere um **token permanente** com as permissões
-   `whatsapp_business_messaging` e `whatsapp_business_management`.
-5. Preencha no `.env`: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET` (em
-   *Configurações do app → Básico*) e invente um `WHATSAPP_VERIFY_TOKEN`.
-6. Em *WhatsApp → Configuração*, cadastre o webhook `https://SEU-DOMINIO/webhook/whatsapp/` com o mesmo
-   verify token e assine os campos **messages**.
-7. Em *WhatsApp Manager → Modelos de mensagem*, crie os dois templates (categoria **Utilidade**,
-   idioma **Português (BR)**, cabeçalho **Documento**):
-
-**`envio_boleto`**
-> Olá {{1}}, segue o boleto da mensalidade de {{2}} no valor de R$ {{3}}, com vencimento em {{4}}. Linha digitável: {{5}}. Qualquer dúvida, responda esta mensagem.
-
-**`lembrete_atraso`**
-> Olá {{1}}, identificamos que o boleto da mensalidade de {{2}}, no valor de R$ {{3}}, venceu em {{4}} e ainda consta em aberto. Segue o boleto novamente. Linha digitável: {{5}}. Se já realizou o pagamento, envie o comprovante por aqui e desconsidere esta mensagem.
-
-Os nomes dos templates podem ser alterados em **Configurações**. A Meta cobra por mensagem de template
-(categoria utilidade é das mais baratas); respostas dentro de 24h após o cliente escrever não são cobradas como template.
+3. Gere um **token permanente** (usuário do sistema) com `whatsapp_business_messaging` e `whatsapp_business_management`.
+4. No `.env`: `WHATSAPP_PROVEDOR=oficial`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`.
+5. Webhook: `https://SEU-DOMINIO/webhook/whatsapp/`, campo **messages**.
+6. Crie os templates `envio_boleto` e `lembrete_atraso` (categoria Utilidade, cabeçalho Documento, variáveis
+   {{1}} nome, {{2}} competência, {{3}} valor, {{4}} vencimento, {{5}} linha digitável).
 
 ## Rotina mensal com o sistema
 
@@ -88,4 +123,5 @@ core/services/     regras de negócio: leitura de PDF, linha digitável, WhatsAp
 core/views/        telas
 core/templates/    HTML (responsivo, tema claro/escuro)
 core/management/   comandos: processar_cobrancas, agendador, backup, dados_demo
+gateway/           conexão do WhatsApp por QR Code (Node.js + Baileys)
 ```

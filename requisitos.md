@@ -116,3 +116,10 @@ Padrões adotados para perguntas ainda não respondidas (todos ajustáveis em Co
 - Rotina de suporte (chamados, atendimentos, visitas) — ainda não levantada.
 - Importação de extrato OFX da conta do titular para reconhecer PIX do sócio automaticamente.
 - Reajuste anual de mensalidades com aviso ao cliente.
+
+## Mudança de decisão (18/11/2026) — WhatsApp por QR Code
+- O titular decidiu NÃO pagar API e conectar o WhatsApp por QR Code (substitui RNF-02).
+- Risco aceito pelo titular: canal não oficial, possibilidade de bloqueio do número pela Meta.
+- Mitigações: chip dedicado (recomendado), intervalo aleatório 20–45 s, simulação de digitação,
+  horário comercial, apenas clientes cadastrados, verificação do número antes do envio.
+- API oficial mantida como opção (WHATSAPP_PROVEDOR=oficial).

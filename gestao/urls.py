@@ -50,5 +50,8 @@ urlpatterns = [
     path("configuracoes/", geral.configuracoes, name="configuracoes"),
     path("auditoria/", geral.auditoria, name="auditoria"),
     path("webhook/whatsapp/", geral.webhook_whatsapp, name="webhook_whatsapp"),
+    path("webhook/gateway/", geral.webhook_gateway, name="webhook_gateway"),
+    path("whatsapp/status/", geral.whatsapp_status, name="whatsapp_status"),
+    path("whatsapp/desconectar/", geral.whatsapp_desconectar, name="whatsapp_desconectar"),
     path("admin-tecnico/", admin.site.urls),
 ]

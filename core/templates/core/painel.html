@@ -5,7 +5,8 @@
   <div><h1>Painel</h1><div class="muted small">{{ p.hoje|date:"l, d \d\e F \d\e Y" }}</div></div>
   <div class="acoes"><a class="btn" href="{% url 'importar' %}">⬆ Importar boletos</a><a class="btn prim" href="{% url 'cliente_novo' %}">+ Cliente</a></div>
 </div>
-{% if simulacao %}<div class="aviso">⚠ WhatsApp em <strong>modo simulação</strong>: as mensagens são registradas mas não enviadas. Configure as credenciais da API oficial em <code>.env</code> (veja Configurações).</div>{% endif %}
+{% if simulacao %}<div class="aviso">⚠ WhatsApp em <strong>modo simulação</strong>: as mensagens são registradas mas não enviadas. Veja <a href="{% url 'configuracoes' %}">Configurações</a>.</div>
+{% elif wa.conexao != "conectado" %}<div class="flash error">⚠ WhatsApp <strong>desconectado</strong>: os envios automáticos estão parados. <a href="{% url 'configuracoes' %}">Escaneie o QR Code em Configurações</a>.</div>{% endif %}
 
 <div class="grid g4 kpis mb">
   <div class="card kpi"><span class="rot">Mensalidades de {{ p.competencia|date:"F" }}</span><span class="val">{{ p.mes.total|brl }}</span><span class="sub">{{ p.mes.qtd }} cobranças</span></div>

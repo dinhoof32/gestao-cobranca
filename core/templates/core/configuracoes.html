@@ -3,27 +3,65 @@
 {% block conteudo %}
 <div class="cab"><h1>Configurações</h1></div>
 <div class="grid g2">
-<div class="card"><h2>Régua de cobrança e regras</h2>
-  <form method="post">{% csrf_token %}{% for f in form %}{% include "core/_campo.html" %}{% endfor %}<button class="btn prim">Salvar</button></form>
-</div>
 <div>
-  <div class="card mb"><h2>WhatsApp — API oficial (Cloud API)</h2>
-    {% if simulacao %}<div class="aviso">Modo <strong>simulação</strong> ativo: nada é enviado de verdade.</div>{% else %}<div class="flash success">API configurada: envios reais ativos.</div>{% endif %}
-    <dl class="dados">
-      <dt>Token de acesso</dt><dd>{% if wa.token %}✅ configurado{% else %}❌ WHATSAPP_TOKEN{% endif %}</dd>
-      <dt>Phone Number ID</dt><dd>{% if wa.phone %}✅ configurado{% else %}❌ WHATSAPP_PHONE_NUMBER_ID{% endif %}</dd>
-      <dt>App Secret</dt><dd>{% if wa.secret %}✅ configurado{% else %}❌ WHATSAPP_APP_SECRET{% endif %}</dd>
-      <dt>Verify token</dt><dd>{% if wa.verify %}✅ configurado{% else %}❌ WHATSAPP_VERIFY_TOKEN{% endif %}</dd>
-      <dt>Versão da API</dt><dd>{{ wa.versao }}</dd>
-      <dt>URL do webhook</dt><dd class="mono">{{ webhook_url }}</dd>
-    </dl>
-    <p class="small muted">As credenciais ficam no arquivo <code>.env</code> do servidor, nunca no banco. O passo a passo está no README.</p>
+  <div class="card mb" id="wa-card">
+    <h2>Conexão do WhatsApp</h2>
+    {% if provedor == "qrcode" %}
+      {% if not gateway_configurado %}
+        <div class="aviso">Gateway não configurado (<code>GATEWAY_URL</code> e <code>GATEWAY_TOKEN</code> no <code>.env</code>). Sistema em <strong>modo simulação</strong>.</div>
+      {% else %}
+        <div id="wa-estado" class="mb"><span class="badge neutro">verificando…</span></div>
+        <div id="wa-qr" style="display:none;text-align:center">
+          <img id="wa-qr-img" alt="QR Code do WhatsApp" style="width:260px;max-width:100%;background:#fff;padding:10px;border-radius:12px">
+          <ol class="small" style="text-align:left;padding-left:18px">
+            <li>Abra o WhatsApp no celular do número que vai enviar as cobranças.</li>
+            <li>Toque em <strong>⋮ / Configurações → Dispositivos conectados → Conectar dispositivo</strong>.</li>
+            <li>Aponte a câmera para este QR Code. Ele se atualiza sozinho.</li>
+          </ol>
+        </div>
+        <div id="wa-conectado" style="display:none">
+          <p class="small">Número conectado: <strong id="wa-numero"></strong>. A sessão fica salva no servidor: não é preciso escanear novamente.</p>
+          <form method="post" action="{% url 'whatsapp_desconectar' %}" data-confirma="Desconectar este número? Será preciso escanear o QR Code de novo.">{% csrf_token %}<button class="btn peq perigo">Desconectar número</button></form>
+        </div>
+      {% endif %}
+      <div class="aviso mt small">⚠ Conexão por QR Code usa o WhatsApp Web (não oficial). A Meta pode bloquear números que automatizam o WhatsApp Web, e um bloqueio não pode ser revertido. Para reduzir o risco, o sistema espaça os envios (20–45 s), simula digitação, só envia em horário comercial e apenas para clientes cadastrados. <strong>Recomendado: use um chip só para cobranças.</strong></div>
+    {% else %}
+      {% if simulacao %}<div class="aviso">API oficial sem credenciais: <strong>modo simulação</strong>.</div>{% else %}<div class="flash success">API oficial configurada: envios reais ativos.</div>{% endif %}
+      <dl class="dados">
+        <dt>Token de acesso</dt><dd>{% if wa.token %}✅{% else %}❌ WHATSAPP_TOKEN{% endif %}</dd>
+        <dt>Phone Number ID</dt><dd>{% if wa.phone %}✅{% else %}❌ WHATSAPP_PHONE_NUMBER_ID{% endif %}</dd>
+        <dt>App Secret</dt><dd>{% if wa.secret %}✅{% else %}❌ WHATSAPP_APP_SECRET{% endif %}</dd>
+        <dt>Verify token</dt><dd>{% if wa.verify %}✅{% else %}❌ WHATSAPP_VERIFY_TOKEN{% endif %}</dd>
+        <dt>URL do webhook</dt><dd class="mono">{{ webhook_url }}</dd>
+      </dl>
+    {% endif %}
+    <p class="small muted mt">Provedor atual: <strong>{% if provedor == "qrcode" %}QR Code (sem custo){% else %}API oficial da Meta{% endif %}</strong>. Para trocar, altere <code>WHATSAPP_PROVEDOR</code> no <code>.env</code>.</p>
   </div>
-  <div class="card"><h2>Templates para cadastrar na Meta</h2>
-    <p class="small muted">Categoria <strong>Utilidade</strong>, idioma Português (BR), cabeçalho <strong>Documento</strong>. Variáveis: {% templatetag openvariable %}1{% templatetag closevariable %} nome, {% templatetag openvariable %}2{% templatetag closevariable %} competência, {% templatetag openvariable %}3{% templatetag closevariable %} valor, {% templatetag openvariable %}4{% templatetag closevariable %} vencimento, {% templatetag openvariable %}5{% templatetag closevariable %} linha digitável.</p>
-    <h3>{{ cfg_global.template_boleto }}</h3><p class="small" style="background:var(--surface-2);padding:10px;border-radius:8px">{{ exemplo }}</p>
-    <h3>{{ cfg_global.template_atraso }}</h3><p class="small" style="background:var(--surface-2);padding:10px;border-radius:8px">{{ exemplo_atraso }}</p>
+  <div class="card"><h2>Prévia das mensagens</h2>
+    <h3>Envio do boleto</h3><p class="small" style="background:var(--surface-2);padding:10px;border-radius:8px;white-space:pre-wrap">{{ exemplo }}</p>
+    <h3>Lembrete de atraso</h3><p class="small" style="background:var(--surface-2);padding:10px;border-radius:8px;white-space:pre-wrap">{{ exemplo_atraso }}</p>
+    <p class="small muted">O PDF do boleto vai anexado em ambas.{% if provedor == "oficial" %} Na API oficial, o texto enviado é o do template aprovado na Meta.{% endif %}</p>
   </div>
+</div>
+<div class="card"><h2>Régua de cobrança e regras</h2>
+  <form method="post">{% csrf_token %}{% for f in form %}{% if provedor == "qrcode" and f.name in "template_boleto template_atraso template_idioma" %}{% else %}{% include "core/_campo.html" %}{% endif %}{% endfor %}<button class="btn prim">Salvar</button></form>
 </div>
 </div>
 {% endblock %}
+{% block scripts %}{% if provedor == "qrcode" and gateway_configurado %}
+<script>
+const rot={conectado:['ok','Conectado'],aguardando_qr:['alerta','Aguardando leitura do QR Code'],conectando:['info','Conectando…'],desconectado:['perigo','Desconectado — reconectando'],gateway_fora:['perigo','Gateway fora do ar'],iniciando:['info','Iniciando…']};
+async function atualizar(){
+  try{
+    const r=await fetch('{% url "whatsapp_status" %}',{credentials:'same-origin'});const s=await r.json();
+    const [cor,txt]=rot[s.conexao]||['neutro',s.conexao];
+    document.getElementById('wa-estado').innerHTML=`<span class="badge ${cor}">${txt}</span>`+(s.erro&&s.conexao!=='conectado'?` <span class="small muted">${s.erro.replace(/[<>&]/g,'')}</span>`:'');
+    document.getElementById('wa-qr').style.display=s.qr?'block':'none';
+    if(s.qr)document.getElementById('wa-qr-img').src=s.qr;
+    document.getElementById('wa-conectado').style.display=s.conexao==='conectado'?'block':'none';
+    document.getElementById('wa-numero').textContent=s.numero||'';
+    setTimeout(atualizar,s.conexao==='conectado'?15000:3000);
+  }catch(e){setTimeout(atualizar,5000)}
+}
+atualizar();
+</script>{% endif %}{% endblock %}

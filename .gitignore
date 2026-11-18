@@ -3,3 +3,5 @@ dados/
 staticfiles/
 __pycache__/
 *.pyc
+gateway/node_modules/
+gateway/sessao/

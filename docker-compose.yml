@@ -1,16 +1,31 @@
-# Sobe o sistema web + o agendador (régua de cobrança a cada 30 min e backup diário às 02h).
-# Coloque um proxy com HTTPS na frente (Caddy/Nginx/Cloudflare): a Meta exige HTTPS no webhook.
+# web:       sistema (Django)
+# agendador: régua de cobrança a cada 30 min + backup diário às 02h
+# gateway:   conexão do WhatsApp por QR Code (sessão salva em ./dados/whatsapp-sessao)
+# Coloque um proxy com HTTPS na frente do "web" (ex.: Caddy).
 services:
   web:
     build: .
     env_file: .env
+    environment:
+      GATEWAY_URL: http://gateway:3000
     volumes: ["./dados:/app/dados"]
     ports: ["127.0.0.1:8000:8000"]
     restart: unless-stopped
   agendador:
     build: .
     env_file: .env
+    environment:
+      GATEWAY_URL: http://gateway:3000
     volumes: ["./dados:/app/dados"]
     command: python manage.py agendador
-    depends_on: [web]
+    depends_on: [web, gateway]
+    restart: unless-stopped
+  gateway:
+    build: ./gateway
+    environment:
+      GATEWAY_TOKEN: ${GATEWAY_TOKEN}
+      WEBHOOK_URL: http://web:8000/webhook/gateway/
+      INTERVALO_MIN_SEG: ${INTERVALO_MIN_SEG:-20}
+      INTERVALO_MAX_SEG: ${INTERVALO_MAX_SEG:-45}
+    volumes: ["./dados/whatsapp-sessao:/app/sessao"]
     restart: unless-stopped

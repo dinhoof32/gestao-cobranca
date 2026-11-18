@@ -279,3 +279,90 @@ class TelasTests(Base):
         cob = self.cobranca(timezone.localdate())
         r = self.client.get(f"/cobrancas/{cob.pk}/boleto.pdf")
         self.assertEqual(r.status_code, 302)
+
+
+GW = {"URL": "http://gateway:3000", "TOKEN": "token-de-teste-1234567890"}
+
+
+class RespostaFalsa:
+    def __init__(self, status, dados):
+        self.status_code, self._d, self.text = status, dados, json.dumps(dados)
+
+    def json(self):
+        return self._d
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise Exception(self.status_code)
+
+
+@override_settings(WHATSAPP_PROVEDOR="qrcode", GATEWAY=GW)
+class GatewayQRCodeTests(Base):
+    def test_envio_leva_pdf_e_texto(self):
+        cob = self.cobranca(timezone.localdate() + timedelta(days=2))
+        with mock.patch("core.services.whatsapp.requests.post",
+                        return_value=RespostaFalsa(200, {"id": "ABC123"})) as post:
+            msg = svc.enviar_cobranca(cob.pk, Mensagem.TIPO_BOLETO)
+        self.assertEqual(msg.status, Mensagem.ST_ENVIADA)
+        self.assertEqual(msg.wa_message_id, "ABC123")
+        corpo = post.call_args.kwargs["json"]
+        self.assertEqual(corpo["telefone"], "5511987654321")
+        self.assertIn("Padaria", corpo["texto"])
+        self.assertIn("200,00", corpo["texto"])
+        self.assertEqual(corpo["documento"]["mime"], "application/pdf")
+        self.assertTrue(corpo["documento"]["base64"])
+        self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], f"Bearer {GW['TOKEN']}")
+
+    def test_desconectado_nao_conta_como_falha(self):
+        cob = self.cobranca(timezone.localdate() + timedelta(days=2))
+        with mock.patch("core.services.whatsapp.requests.post",
+                        return_value=RespostaFalsa(503, {"erro": "WhatsApp desconectado"})):
+            with self.assertRaises(svc.EnvioBloqueado):
+                svc.enviar_cobranca(cob.pk, Mensagem.TIPO_BOLETO)
+        self.assertFalse(cob.mensagens.exists())
+        self.assertTrue(Tarefa.objects.filter(titulo__startswith="WhatsApp desconectado").exists())
+
+    def test_regua_nao_envia_se_desconectado(self):
+        self.cobranca(timezone.localdate() + timedelta(days=2))
+        with mock.patch("core.services.whatsapp.requests.get",
+                        return_value=RespostaFalsa(200, {"conexao": "aguardando_qr", "qr": "data:x"})), \
+             mock.patch("core.services.whatsapp.requests.post") as post:
+            r = svc.processar_regua(agora=agora_util())
+        self.assertEqual(r["boletos"], 0)
+        post.assert_not_called()
+
+    def test_regua_envia_quando_conectado(self):
+        self.cobranca(timezone.localdate() + timedelta(days=2))
+        with mock.patch("core.services.whatsapp.requests.get",
+                        return_value=RespostaFalsa(200, {"conexao": "conectado"})), \
+             mock.patch("core.services.whatsapp.requests.post", return_value=RespostaFalsa(200, {"id": "X"})):
+            r = svc.processar_regua(agora=agora_util())
+        self.assertEqual(r["boletos"], 1)
+
+    def test_webhook_gateway(self):
+        import base64
+        cob = self.cobranca(timezone.localdate() - timedelta(days=3))
+        Mensagem.objects.create(cliente=self.cli, cobranca=cob, tipo="boleto", telefone="x",
+                                status=Mensagem.ST_ENVIADA, wa_message_id="M1")
+        h = {"HTTP_X_GATEWAY_TOKEN": GW["TOKEN"]}
+        r = self.client.post("/webhook/gateway/", {"tipo": "status", "id": "M1", "status": "lida"},
+                             content_type="application/json", **h)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(Mensagem.objects.get(wa_message_id="M1").status, Mensagem.ST_LIDA)
+        self.client.post("/webhook/gateway/", {
+            "tipo": "mensagem", "id": "M2", "de": "5511987654321", "texto": "paguei",
+            "midia": {"base64": base64.b64encode(b"img").decode(), "mime": "image/jpeg", "nome": "c.jpg",
+                      "tipo": "image"}}, content_type="application/json", **h)
+        cob.refresh_from_db()
+        self.assertEqual(cob.status, Cobranca.INFORMADO)
+        self.assertFalse(LancamentoSocio.objects.exists())  # comprovante não dá baixa
+        r = self.client.post("/webhook/gateway/", {"tipo": "status"}, content_type="application/json",
+                             HTTP_X_GATEWAY_TOKEN="errado")
+        self.assertEqual(r.status_code, 403)
+
+    def test_texto_configuravel(self):
+        cfg = Configuracao.get()
+        cfg.texto_boleto = "Oi {nome}, vence {vencimento}. {empresa}"
+        cfg.save()
+        cob = self.cobranca(timezone.localdate() + timedelta(days=2))
+        self.assertTrue(svc.texto_previsto(cob, Mensagem.TIPO_BOLETO).startswith("Oi Padaria, vence"))

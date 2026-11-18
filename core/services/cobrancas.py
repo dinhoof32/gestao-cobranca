@@ -142,12 +142,14 @@ def parametros_template(cob: Cobranca):
 
 def texto_previsto(cob: Cobranca, tipo: str) -> str:
     nome, comp, valor, venc, linha = parametros_template(cob)
-    if tipo == Mensagem.TIPO_ATRASO:
-        return (f"Olá {nome}, identificamos que o boleto da mensalidade de {comp}, no valor de R$ {valor}, "
-                f"venceu em {venc} e ainda consta em aberto. Segue o boleto novamente. Linha digitável: {linha}. "
-                "Se já realizou o pagamento, envie o comprovante por aqui e desconsidere esta mensagem.")
-    return (f"Olá {nome}, segue o boleto da mensalidade de {comp} no valor de R$ {valor}, com vencimento "
-            f"em {venc}. Linha digitável: {linha}. Qualquer dúvida, responda esta mensagem.")
+    cfg = Configuracao.get()
+    modelo = cfg.texto_atraso if tipo == Mensagem.TIPO_ATRASO else cfg.texto_boleto
+    dados = {"nome": nome, "competencia": comp, "valor": valor, "vencimento": venc, "linha": linha,
+             "empresa": cfg.nome_empresa}
+    try:
+        return modelo.format(**dados)
+    except (KeyError, IndexError, ValueError):
+        return modelo
 
 
 def ja_enviada(cob: Cobranca, tipo: str) -> bool:
@@ -164,8 +166,13 @@ class EnvioBloqueado(Exception):
 
 def enviar_cobranca(cob_id: int, tipo: str, usuario=None, automatica=False, forcar=False) -> Mensagem:
     """
-    Envia o boleto (tipo=boleto) ou o lembrete de atraso (tipo=atraso).
-    Rechecagem dentro de transação com bloqueio de linha: boleto pago/cancelado NUNCA é cobrado.
+    Envia o boleto (tipo=boleto) ou o lembrete de atraso (tipo=atraso), com o PDF anexado.
+
+    Três fases, para não segurar o banco durante o envio (o gateway espaça as mensagens):
+      1. reserva: confere status (pago/cancelado NUNCA é cobrado) e registra a mensagem como pendente;
+      2. envio pelo WhatsApp, fora de transação;
+      3. resultado: grava o status da mensagem.
+    A mensagem pendente da fase 1 impede envio duplicado em paralelo.
     """
     cfg = Configuracao.get()
     with transaction.atomic():
@@ -174,31 +181,41 @@ def enviar_cobranca(cob_id: int, tipo: str, usuario=None, automatica=False, forc
             raise EnvioBloqueado(f"Cobrança está {cob.get_status_display().lower()}: envio cancelado.")
         if not cob.cliente.whatsapp_e164:
             raise EnvioBloqueado("Cliente sem número de WhatsApp cadastrado.")
+        if cob.mensagens.filter(tipo=tipo, status=Mensagem.ST_PENDENTE,
+                                criado_em__gte=timezone.now() - timedelta(minutes=15)).exists():
+            raise EnvioBloqueado("Já existe um envio desta mensagem em andamento.")
         if automatica and not forcar and ja_enviada(cob, tipo):
             raise EnvioBloqueado("Mensagem já enviada anteriormente.")
-
+        texto = texto_previsto(cob, tipo)
         msg = Mensagem.objects.create(
             cliente=cob.cliente, cobranca=cob, tipo=tipo, automatica=automatica,
-            telefone=cob.cliente.whatsapp_e164, conteudo=texto_previsto(cob, tipo), enviada_por=usuario,
+            telefone=cob.cliente.whatsapp_e164, conteudo=texto, enviada_por=usuario,
         )
-        template = cfg.template_atraso if tipo == Mensagem.TIPO_ATRASO else cfg.template_boleto
-        try:
-            media_id = None
-            if cob.pdf:
-                with cob.pdf.open("rb") as f:
-                    media_id = whatsapp.enviar_midia(f.read(), _nome_pdf(cob))
-            wa_id = whatsapp.enviar_template(cob.cliente.whatsapp_e164, template, cfg.template_idioma,
-                                             parametros_template(cob), media_id, _nome_pdf(cob))
-            msg.wa_message_id = wa_id
-            msg.status = Mensagem.ST_SIMULADA if whatsapp.simulacao() else Mensagem.ST_ENVIADA
-            if cob.status == Cobranca.AGENDADA:
-                cob.status = Cobranca.ENVIADA
-            cob.save()
-        except Exception as exc:  # noqa: BLE001
-            msg.status = Mensagem.ST_FALHA
-            msg.erro = str(exc)[:2000]
-            log.warning("Falha no envio da cobrança %s: %s", cob.pk, exc)
+
+    template = cfg.template_atraso if tipo == Mensagem.TIPO_ATRASO else cfg.template_boleto
+    pdf = None
+    if cob.pdf:
+        with cob.pdf.open("rb") as f:
+            pdf = f.read()
+    try:
+        msg.wa_message_id = whatsapp.enviar_cobranca(
+            cob.cliente.whatsapp_e164, texto, pdf, _nome_pdf(cob), template, cfg.template_idioma,
+            parametros_template(cob))
+        msg.status = Mensagem.ST_SIMULADA if whatsapp.simulacao() else Mensagem.ST_ENVIADA
+    except whatsapp.WhatsAppIndisponivel as exc:
+        # não é falha da mensagem: o número está desconectado. Será tentado na próxima execução.
+        msg.delete()
+        avisar_desconectado()
+        raise EnvioBloqueado(str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        msg.status = Mensagem.ST_FALHA
+        msg.erro = str(exc)[:2000]
+        log.warning("Falha no envio da cobrança %s: %s", cob.pk, exc)
+
+    with transaction.atomic():
         msg.save()
+        if msg.status != Mensagem.ST_FALHA:
+            Cobranca.objects.filter(pk=cob.pk, status=Cobranca.AGENDADA).update(status=Cobranca.ENVIADA)
 
     if msg.status == Mensagem.ST_FALHA:
         if not automatica or tentativas_falhas(cob, tipo) >= MAX_TENTATIVAS:
@@ -207,6 +224,12 @@ def enviar_cobranca(cob_id: int, tipo: str, usuario=None, automatica=False, forc
     registrar("whatsapp.enviar", cob, {"tipo": tipo, "automatica": automatica, "status": msg.status,
                                        "erro": msg.erro}, usuario=usuario)
     return msg
+
+
+def avisar_desconectado():
+    Tarefa.criar_unica(Tarefa.FALHA_ENVIO,
+                       "WhatsApp desconectado: escaneie o QR Code em Configurações para retomar os envios",
+                       prazo=timezone.localdate())
 
 
 def _nome_pdf(cob):
@@ -228,8 +251,16 @@ def processar_regua(agora=None, enviar=True) -> dict:
     agora = agora or timezone.now()
     hoje = timezone.localtime(agora).date()
     pode_enviar = enviar and cfg.envio_automatico_ativo and dentro_da_janela(cfg, agora)
+    if pode_enviar:
+        if whatsapp.conectado():
+            Tarefa.objects.filter(tipo=Tarefa.FALHA_ENVIO, cliente=None, cobranca=None, concluida=False,
+                                  titulo__startswith="WhatsApp desconectado").update(
+                concluida=True, concluida_em=timezone.now())
+        else:
+            pode_enviar = False
+            avisar_desconectado()
     res = {"vencidas": 0, "boletos": 0, "lembretes": 0, "falhas": 0, "bloqueios": 0, "faltando": 0,
-           "janela": pode_enviar}
+           "enviando": pode_enviar}
 
     # 1) atualiza status de vencidas
     res["vencidas"] = Cobranca.objects.filter(
@@ -481,3 +512,40 @@ def _mensagem_recebida(m):
         conteudo = f"[{tipo}]"
     Mensagem.objects.create(cliente=cli, tipo=Mensagem.TIPO_RECEBIDA, telefone=telefone, conteudo=conteudo,
                             status=Mensagem.ST_RECEBIDA, wa_message_id=m.get("id", ""))
+
+
+# ======================================================================================
+# Eventos do gateway QR Code
+# ======================================================================================
+MAPA_STATUS_GATEWAY = {"enviada": Mensagem.ST_ENVIADA, "entregue": Mensagem.ST_ENTREGUE,
+                       "lida": Mensagem.ST_LIDA, "falha": Mensagem.ST_FALHA}
+
+
+def processar_evento_gateway(ev: dict):
+    import base64
+    if ev.get("tipo") == "status":
+        novo = MAPA_STATUS_GATEWAY.get(ev.get("status"))
+        if novo:
+            _atualizar_status({"id": ev.get("id"), "status": {v: k for k, v in MAPA_STATUS.items()}[novo]})
+        return
+    if ev.get("tipo") != "mensagem":
+        return
+    if ev.get("id") and Mensagem.objects.filter(wa_message_id=ev["id"]).exists():
+        return
+    telefone = ev.get("de", "")
+    cli = cliente_por_telefone(telefone) if telefone else None
+    conteudo = ev.get("texto", "")
+    midia = ev.get("midia")
+    if midia:
+        rotulo = "[Imagem]" if midia.get("tipo") == "image" else "[Documento]"
+        conteudo = f"{rotulo} {conteudo}".strip()
+        if cli:
+            dados = base64.b64decode(midia.get("base64", ""))
+            registrar_comprovante(cli, dados, midia.get("nome") or "comprovante", midia.get("mime", ""),
+                                  Comprovante.ORIGEM_WHATSAPP, telefone=telefone)
+            conteudo += " — anexado como comprovante"
+    elif ev.get("erro_midia"):
+        conteudo += f" [falha ao baixar mídia: {ev['erro_midia']}]"
+    Mensagem.objects.create(cliente=cli, tipo=Mensagem.TIPO_RECEBIDA, telefone=telefone or ev.get("nome", "?"),
+                            conteudo=conteudo or "[mensagem]", status=Mensagem.ST_RECEBIDA,
+                            wa_message_id=ev.get("id", ""))

@@ -126,6 +126,8 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
+    # o gateway do WhatsApp chama o sistema pela rede interna do Docker, sem HTTPS (protegido por token)
+    SECURE_REDIRECT_EXEMPT = [r"^webhook/gateway/$"]
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
@@ -134,15 +136,22 @@ if not DEBUG:
 LOGIN_MAX_TENTATIVAS = 5
 LOGIN_BLOQUEIO_MINUTOS = 15
 
-# ---------- WhatsApp Business Platform (Cloud API oficial da Meta) ----------
+# ---------- WhatsApp ----------
+# PROVEDOR: "qrcode" = WhatsApp conectado por QR Code (gateway próprio, sem custo de API)
+#           "oficial" = WhatsApp Business Platform / Cloud API da Meta (pago por mensagem)
+WHATSAPP_PROVEDOR = os.getenv("WHATSAPP_PROVEDOR", "qrcode").strip().lower()
+GATEWAY = {
+    "URL": os.getenv("GATEWAY_URL", "").rstrip("/"),
+    "TOKEN": os.getenv("GATEWAY_TOKEN", ""),
+}
 WHATSAPP = {
     "TOKEN": os.getenv("WHATSAPP_TOKEN", ""),
     "PHONE_NUMBER_ID": os.getenv("WHATSAPP_PHONE_NUMBER_ID", ""),
     "APP_SECRET": os.getenv("WHATSAPP_APP_SECRET", ""),
     "VERIFY_TOKEN": os.getenv("WHATSAPP_VERIFY_TOKEN", ""),
     "API_VERSION": os.getenv("WHATSAPP_API_VERSION", "v21.0"),
-    # Sem token configurado, o sistema funciona em MODO SIMULAÇÃO: registra tudo, não envia nada.
-    "SIMULACAO": env_bool("WHATSAPP_SIMULACAO", not os.getenv("WHATSAPP_TOKEN")),
+    # Sem credenciais do provedor escolhido, o sistema funciona em MODO SIMULAÇÃO: registra tudo, não envia nada.
+    "SIMULACAO": env_bool("WHATSAPP_SIMULACAO", False),
 }
 
 LOGGING = {

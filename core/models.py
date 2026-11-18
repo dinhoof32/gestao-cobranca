@@ -58,7 +58,22 @@ class Configuracao(models.Model):
     base_calculo_repasse = models.CharField(
         "Base de cálculo do repasse", max_length=10, choices=BASE_CHOICES, default=BASE_VALOR_BOLETO)
 
-    # Nomes dos templates aprovados no WhatsApp Manager
+    # Textos das mensagens (variáveis: {nome} {competencia} {valor} {vencimento} {linha} {empresa})
+    texto_boleto = models.TextField(
+        "Texto do envio do boleto",
+        default=("Olá {nome}, segue o boleto da mensalidade de {competencia} no valor de R$ {valor}, "
+                 "com vencimento em {vencimento}.\n\nLinha digitável: {linha}\n\n"
+                 "Qualquer dúvida, é só responder esta mensagem."),
+        help_text="Variáveis: {nome} {competencia} {valor} {vencimento} {linha} {empresa}")
+    texto_atraso = models.TextField(
+        "Texto do lembrete de atraso",
+        default=("Olá {nome}, identificamos que o boleto da mensalidade de {competencia}, no valor de "
+                 "R$ {valor}, venceu em {vencimento} e ainda consta em aberto. Segue o boleto novamente.\n\n"
+                 "Linha digitável: {linha}\n\nSe já realizou o pagamento, envie o comprovante por aqui "
+                 "e desconsidere esta mensagem."),
+        help_text="Variáveis: {nome} {competencia} {valor} {vencimento} {linha} {empresa}")
+
+    # (API oficial) Nomes dos templates aprovados no WhatsApp Manager
     template_boleto = models.CharField("Template: envio do boleto", max_length=80, default="envio_boleto")
     template_atraso = models.CharField("Template: lembrete de atraso", max_length=80, default="lembrete_atraso")
     template_idioma = models.CharField("Idioma dos templates", max_length=10, default="pt_BR")

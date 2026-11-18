@@ -27,7 +27,8 @@ log = logging.getLogger(__name__)
 
 @login_required
 def painel(request):
-    return render(request, "core/painel.html", {"p": financeiro.painel(), "simulacao": whatsapp.simulacao()})
+    return render(request, "core/painel.html", {"p": financeiro.painel(), "simulacao": whatsapp.simulacao(),
+                                                "wa": whatsapp.status_conexao()})
 
 
 # ------------------------------------------------------------------ tarefas
@@ -85,7 +86,7 @@ def conversa(request, pk):
     ultima_recebida = cli.mensagens.filter(tipo=Mensagem.TIPO_RECEBIDA).aggregate(m=Max("criado_em"))["m"]
     janela_aberta = bool(ultima_recebida and timezone.now() - ultima_recebida < timedelta(hours=24))
     if request.method == "POST" and form.is_valid():
-        if not janela_aberta and not whatsapp.simulacao():
+        if not janela_aberta and whatsapp.exige_janela_24h():
             messages.error(request, "Fora da janela de 24h: só é possível enviar templates (boleto/lembrete).")
         else:
             texto = form.cleaned_data["texto"]
@@ -101,7 +102,7 @@ def conversa(request, pk):
             return redirect("conversa", pk)
     historico = cli.mensagens.order_by("criado_em")
     return render(request, "core/conversa.html", {"cli": cli, "historico": historico, "form": form,
-                                                  "janela_aberta": janela_aberta})
+                                                  "janela_aberta": janela_aberta or not whatsapp.exige_janela_24h()})
 
 
 # ------------------------------------------------------------------ relatórios
@@ -156,7 +157,8 @@ def configuracoes(request):
         return redirect("configuracoes")
     w = settings.WHATSAPP
     return render(request, "core/configuracoes.html", {
-        "form": form, "simulacao": whatsapp.simulacao(),
+        "form": form, "simulacao": whatsapp.simulacao(), "provedor": whatsapp.provedor(),
+        "gateway_configurado": bool(settings.GATEWAY["URL"] and settings.GATEWAY["TOKEN"]),
         "wa": {"token": bool(w["TOKEN"]), "phone": bool(w["PHONE_NUMBER_ID"]), "secret": bool(w["APP_SECRET"]),
                "verify": bool(w["VERIFY_TOKEN"]), "versao": w["API_VERSION"]},
         "webhook_url": f"{settings.SITE_URL}/webhook/whatsapp/",
@@ -225,4 +227,38 @@ def webhook_whatsapp(request):
         svc.processar_webhook(json.loads(request.body or b"{}"))
     except Exception:  # noqa: BLE001 — sempre 200 para a Meta não ficar reenviando
         log.exception("Erro ao processar webhook")
+    return HttpResponse("ok")
+
+
+# ------------------------------------------------------------------ WhatsApp por QR Code
+@login_required
+def whatsapp_status(request):
+    from django.http import JsonResponse
+    return JsonResponse(whatsapp.status_conexao())
+
+
+@login_required
+@require_POST
+def whatsapp_desconectar(request):
+    try:
+        whatsapp.desconectar()
+        registrar("whatsapp.desconectar", "QR Code", request=request)
+        messages.success(request, "WhatsApp desconectado. Um novo QR Code será exibido em instantes.")
+    except Exception as exc:  # noqa: BLE001
+        messages.error(request, f"Não foi possível desconectar: {exc}")
+    return redirect("configuracoes")
+
+
+@csrf_exempt
+def webhook_gateway(request):
+    if request.method != "POST":
+        return HttpResponse(status=405)
+    if not whatsapp.token_gateway_valido(request.headers.get("X-Gateway-Token")):
+        log.warning("Webhook do gateway com token inválido rejeitado")
+        return HttpResponseForbidden("token inválido")
+    try:
+        svc.processar_evento_gateway(json.loads(request.body or b"{}"))
+    except Exception:  # noqa: BLE001
+        log.exception("Erro ao processar evento do gateway")
+        return HttpResponse("erro", status=500)
     return HttpResponse("ok")
