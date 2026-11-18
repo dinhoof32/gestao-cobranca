@@ -1,0 +1,11 @@
+{% extends "core/base.html" %}
+{% block titulo %}Auditoria{% endblock %}
+{% block conteudo %}
+<div class="cab"><h1>Registro de auditoria</h1><form class="filtros" method="get"><input class="input" name="q" value="{{ q }}" placeholder="Buscar ação, objeto ou detalhe"><button class="btn">Buscar</button></form></div>
+<div class="card"><div class="tabela-wrap"><table class="resp"><thead><tr><th>Data</th><th>Usuário</th><th>Ação</th><th>Objeto</th><th>Detalhes</th><th>IP</th></tr></thead><tbody>
+{% for r in pagina %}<tr><td data-l="Data" class="nowrap">{{ r.criado_em|date:"d/m/Y H:i:s" }}</td><td data-l="Usuário">{{ r.usuario|default:"sistema" }}</td><td data-l="Ação"><code>{{ r.acao }}</code></td><td data-l="Objeto">{{ r.objeto }}</td><td data-l="Detalhes" class="small mono">{{ r.detalhes|truncatechars:160 }}</td><td data-l="IP" class="small">{{ r.ip|default:"" }}</td></tr>
+{% empty %}<tr><td colspan="6" class="vazio">Nada registrado.</td></tr>{% endfor %}</tbody></table></div>
+{% if pagina.has_other_pages %}<div class="filtros mt">{% if pagina.has_previous %}<a class="btn peq" href="?q={{ q }}&p={{ pagina.previous_page_number }}">←</a>{% endif %}<span class="small muted">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>{% if pagina.has_next %}<a class="btn peq" href="?q={{ q }}&p={{ pagina.next_page_number }}">→</a>{% endif %}</div>{% endif %}
+</div>
+<p class="small muted">Os registros de auditoria não podem ser editados nem excluídos pelo sistema.</p>
+{% endblock %}

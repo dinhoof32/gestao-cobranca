@@ -1,0 +1,33 @@
+{% extends "core/base.html" %}
+{% block titulo %}Importar boletos{% endblock %}
+{% block conteudo %}
+<div class="cab"><h1>Importar boletos</h1></div>
+<div class="grid g2 mb">
+<div class="card">
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    {% for f in form %}{% include "core/_campo.html" %}{% endfor %}
+    <button class="btn prim" type="submit">Importar e agendar envios</button>
+  </form>
+</div>
+<div class="card small">
+  <h2>Como funciona</h2>
+  <ol style="padding-left:18px;margin:0;display:grid;gap:6px">
+    <li>Selecione um ou vários PDFs, inclusive o <strong>carnê do ano inteiro</strong> que o sócio envia.</li>
+    <li>O sistema lê cada boleto: <strong>linha digitável, valor e vencimento</strong>, conferindo os dígitos verificadores.</li>
+    <li>O cliente é identificado pelo <strong>CPF/CNPJ</strong> do PDF ou pelo cliente selecionado.</li>
+    <li>Cada boleto vira uma cobrança mensal, com o envio <strong>agendado para {{ cfg_global.dias_antes_vencimento }} dias antes</strong> do vencimento e o lembrete para <strong>{{ cfg_global.dias_apos_vencimento }} dias depois</strong>, se não for pago.</li>
+    <li>Divergências (valor diferente do cadastro, página com vários boletos) viram tarefas de revisão.</li>
+  </ol>
+  <p class="muted">PDF escaneado (imagem) não pode ser lido: cadastre a cobrança manualmente e anexe o PDF.</p>
+</div>
+</div>
+{% if itens %}
+<div class="card"><h2>Resultado</h2>
+  <div class="tabela-wrap"><table class="resp"><thead><tr><th>Arquivo</th><th>Pág.</th><th>Resultado</th><th>Detalhe</th></tr></thead><tbody>
+  {% for i in itens %}<tr><td data-l="Arquivo">{{ i.arquivo }}</td><td data-l="Página">{{ i.pagina|default:"—" }}</td>
+  <td data-l="Resultado"><span class="badge {% if i.status == 'criada' or i.status == 'atualizada' %}ok{% elif i.status == 'erro' %}perigo{% else %}neutro{% endif %}">{{ i.status }}</span></td>
+  <td data-l="Detalhe">{% if i.cobranca %}<a href="{% url 'cobranca_detalhe' i.cobranca.pk %}">{{ i.mensagem }}</a>{% else %}{{ i.mensagem }}{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endif %}
+{% endblock %}

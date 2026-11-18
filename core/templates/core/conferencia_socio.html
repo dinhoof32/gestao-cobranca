@@ -1,0 +1,22 @@
+{% load static fmt %}<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Conferência de pagamentos</title><link rel="stylesheet" href="{% static 'core/app.css' %}"></head>
+<body><main class="conteudo" style="max-width:720px;margin:0 auto">
+<h1>Conferência de pagamentos</h1>
+<p class="muted small">{{ cfg.nome_empresa }} · Toque em <strong>Compensou</strong> apenas quando o valor tiver caído na sua conta.</p>
+{% for m in messages %}<div class="flash {{ m.tags }}">{{ m }}</div>{% endfor %}
+{% for c in abertas %}
+<div class="card mb">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+    <div><strong>{{ c.cliente }}</strong><div class="small muted">{{ c.competencia|date:"m/Y" }} · vence {{ c.vencimento|date:"d/m/Y" }}</div></div>
+    <div class="right"><strong>{{ c.valor|brl }}</strong><div><span class="badge {{ c.status|cor }}">{{ c.get_status_display }}</span></div></div>
+  </div>
+  {% if c.comprovantes.all %}<div class="small mt">Comprovante do cliente: {% for cp in c.comprovantes.all %}<a href="{% url 'conferencia_comprovante' token cp.pk %}" target="_blank">ver {{ forloop.counter }}</a> {% endfor %}</div>{% endif %}
+  <form method="post" class="filtros mt" onsubmit="return confirm('Confirmar que o boleto de {{ c.cliente|escapejs }} compensou?')">{% csrf_token %}
+    <input type="hidden" name="cobranca" value="{{ c.pk }}">
+    <input class="input" type="date" name="pago_em" value="{{ hoje|date:'Y-m-d' }}" max="{{ hoje|date:'Y-m-d' }}" style="flex:0 1 170px">
+    <button class="btn ok">✓ Compensou</button>
+  </form>
+</div>
+{% empty %}<div class="card vazio">Nenhum boleto pendente de conferência. 👍</div>{% endfor %}
+{% if recentes %}<div class="card"><h2>Confirmados recentemente</h2><ul class="lista">{% for c in recentes %}<li><span>{{ c.cliente }} — {{ c.competencia|date:"m/Y" }}</span><span class="small muted">{{ c.pago_em|date:"d/m" }} · {{ c.valor_pago|brl }}</span></li>{% endfor %}</ul></div>{% endif %}
+</main></body></html>

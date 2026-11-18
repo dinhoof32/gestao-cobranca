@@ -1,0 +1,79 @@
+{% extends "core/base.html" %}{% load fmt %}
+{% block titulo %}{{ cli }}{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div><h1>{{ cli.nome }}</h1><div class="muted small">{{ cli.documento|default:"sem CPF/CNPJ" }} · {% if cli.ativo %}ativo{% else %}inativo{% endif %}</div></div>
+  <div class="acoes">
+    <a class="btn" href="{% url 'conversa' cli.pk %}">💬 Conversa</a>
+    <a class="btn" href="{% url 'cobranca_nova' %}?cliente={{ cli.pk }}">+ Cobrança</a>
+    <a class="btn" href="{% url 'importar' %}">⬆ Importar carnê</a>
+    <a class="btn prim" href="{% url 'cliente_editar' cli.pk %}">Editar</a>
+  </div>
+</div>
+<div class="grid g3 mb">
+  <div class="card">
+    <h2>Cadastro</h2>
+    <dl class="dados">
+      <dt>Contato</dt><dd>{{ cli.nome_contato|default:"—" }}</dd>
+      <dt>WhatsApp</dt><dd>{{ cli.whatsapp|default:"—" }}</dd>
+      <dt>Telefone</dt><dd>{{ cli.telefone|default:"—" }}</dd>
+      <dt>E-mail</dt><dd>{{ cli.email|default:"—" }}</dd>
+      <dt>Banco</dt><dd>{{ cli.banco|default:"—" }}</dd>
+      <dt>Envio auto.</dt><dd>{% if cli.envio_automatico %}<span class="badge ok">ligado</span>{% else %}<span class="badge neutro">desligado</span>{% endif %}</dd>
+    </dl>
+    {% if cli.observacoes %}<p class="small muted">{{ cli.observacoes|linebreaksbr }}</p>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Mensalidade e repasse</h2>
+    <dl class="dados">
+      <dt>Mensalidade</dt><dd><strong>{{ cli.mensalidade|brl }}</strong> · dia {{ cli.dia_vencimento }}</dd>
+      <dt>Custo sistema</dt><dd>{{ cli.custo_sistema|brl }}</dd>
+      <dt>Divisão</dt><dd>{{ cli.percentual_titular|floatformat:0 }}% do líquido</dd>
+      <dt>Sua parte</dt><dd><strong style="color:var(--ok)">{{ partes.0|brl }}</strong></dd>
+      <dt>Parte sócio</dt><dd>{{ partes.1|brl }} <span class="muted small">(inclui custo)</span></dd>
+    </dl>
+  </div>
+  <div class="card">
+    <h2>Situação</h2>
+    <dl class="dados">
+      <dt>Portal</dt><dd><span class="badge {{ cli.situacao_licenca|cor }}">{{ cli.get_situacao_licenca_display }}</span></dd>
+      <dt>Em aberto</dt><dd>{{ rel.em_aberto|brl }}</dd>
+      <dt>Total pago</dt><dd>{{ rel.total_pago|brl }}</dd>
+      <dt>Sua parte paga</dt><dd>{{ rel.minha_parte_paga|brl }}</dd>
+      <dt>Atrasos</dt><dd>{{ rel.qtd_atrasos }} · média {{ rel.atraso_medio }} dia(s)</dd>
+    </dl>
+    <form method="post" action="{% url 'cliente_licenca' cli.pk %}" class="mt" data-confirma="Confirma que alterou a situação deste cliente no portal?">{% csrf_token %}
+      <button class="btn peq">{% if cli.situacao_licenca == 'bloqueado' %}Marcar como liberado no portal{% else %}Marcar como bloqueado no portal{% endif %}</button></form>
+  </div>
+</div>
+{% if tarefas %}<div class="card mb"><h2>Tarefas pendentes</h2><ul class="lista">{% for t in tarefas %}<li><span>{{ t.titulo }}</span><form method="post" action="{% url 'tarefa_concluir' t.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}"><button class="btn peq">✓ Concluir</button></form></li>{% endfor %}</ul></div>{% endif %}
+
+<div class="card mb">
+  <h2>Cobranças</h2>
+  <div class="tabela-wrap"><table class="resp">
+    <thead><tr><th>Competência</th><th>Vencimento</th><th class="num">Valor</th><th class="num">Sua parte</th><th>Status</th><th>Repasse</th><th>PDF</th></tr></thead>
+    <tbody>{% for c in rel.cobrancas %}
+    <tr><td data-l="Competência"><a href="{% url 'cobranca_detalhe' c.pk %}">{{ c.competencia|date:"m/Y" }}</a></td>
+    <td data-l="Vencimento">{{ c.vencimento|date:"d/m/Y" }}</td><td data-l="Valor" class="num">{{ c.valor|brl }}</td>
+    <td data-l="Sua parte" class="num">{{ c.parte_titular|brl }}</td>
+    <td data-l="Status"><span class="badge {{ c.status|cor }}">{{ c.get_status_display }}</span></td>
+    <td data-l="Repasse">{% if c.repasse %}<span class="badge {{ c.repasse.situacao|cor }}">{{ c.repasse.situacao }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td data-l="PDF">{% if c.pdf %}<a href="{% url 'arquivo_boleto' c.pk %}" target="_blank">abrir</a>{% else %}<span class="badge alerta">faltando</span>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="7" class="vazio">Nenhuma cobrança. Importe o carnê do ano para agendar os envios.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+<div class="grid g2">
+  <div class="card"><h2>Últimas mensagens</h2>
+    {% if mensagens %}<ul class="lista">{% for m in mensagens|slice:":10" %}<li><div><div class="t">{{ m.get_tipo_display }}</div><div class="s">{{ m.criado_em|date:"d/m/Y H:i" }}{% if m.cobranca %} · {{ m.cobranca.competencia|date:"m/Y" }}{% endif %}</div></div><span class="badge {{ m.status|cor }}">{{ m.get_status_display }}</span></li>{% endfor %}</ul>
+    {% else %}<div class="vazio">Nenhuma mensagem.</div>{% endif %}
+  </div>
+  <div class="card"><h2>Comprovantes recebidos</h2>
+    {% if comprovantes %}<ul class="lista">{% for c in comprovantes %}<li><div><a class="t" href="{% url 'arquivo_comprovante' c.pk %}" target="_blank">Comprovante {{ c.recebido_em|date:"d/m/Y H:i" }}</a><div class="s">{{ c.get_origem_display }}{% if c.cobranca %} · {{ c.cobranca.competencia|date:"m/Y" }}{% endif %}</div></div></li>{% endfor %}</ul>
+    {% else %}<div class="vazio">Nenhum comprovante.</div>{% endif %}
+    <details class="mt"><summary>Anexar comprovante manualmente</summary>
+      <form method="post" enctype="multipart/form-data" action="{% url 'cliente_comprovante' cli.pk %}">{% csrf_token %}
+        {% for f in comp_form %}{% include "core/_campo.html" %}{% endfor %}<button class="btn">Anexar</button></form></details>
+  </div>
+</div>
+{% if historico %}<div class="card mt"><h2>Histórico de valores</h2><div class="tabela-wrap"><table><thead><tr><th>Data</th><th class="num">Mensalidade</th><th class="num">Custo</th><th class="num">%</th><th>Por</th></tr></thead><tbody>{% for h in historico %}<tr><td>{{ h.alterado_em|date:"d/m/Y H:i" }}</td><td class="num">{{ h.mensalidade|brl }}</td><td class="num">{{ h.custo_sistema|brl }}</td><td class="num">{{ h.percentual_titular|floatformat:0 }}%</td><td>{{ h.alterado_por|default:"—" }}</td></tr>{% endfor %}</tbody></table></div></div>{% endif %}
+{% endblock %}

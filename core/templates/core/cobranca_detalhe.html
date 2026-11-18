@@ -1,0 +1,86 @@
+{% extends "core/base.html" %}{% load fmt %}
+{% block titulo %}{{ cob }}{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div><h1>{{ cob.cliente }} — {{ cob.competencia|date:"F/Y" }}</h1>
+  <div class="mt"><span class="badge {{ cob.status|cor }}">{{ cob.get_status_display }}</span>{% if cob.dias_atraso %} <span class="badge perigo">{{ cob.dias_atraso }} dia(s) em atraso</span>{% endif %}{% if cob.lembretes_pausados_ate %} <span class="badge neutro">lembretes pausados até {{ cob.lembretes_pausados_ate|date:"d/m" }}</span>{% endif %}</div></div>
+  <div class="acoes"><a class="btn" href="{% url 'cliente_detalhe' cob.cliente.pk %}">Ver cliente</a>{% if cob.aberta %}<a class="btn" href="{% url 'cobranca_editar' cob.pk %}">Editar</a>{% endif %}</div>
+</div>
+{% if cob.leitura_alerta %}<div class="aviso">⚠ {{ cob.leitura_alerta }}</div>{% endif %}
+
+<div class="grid g2 mb">
+  <div class="card">
+    <h2>Boleto</h2>
+    <dl class="dados">
+      <dt>Vencimento</dt><dd><strong>{{ cob.vencimento|date:"d/m/Y" }}</strong></dd>
+      <dt>Valor</dt><dd><strong>{{ cob.valor|brl }}</strong></dd>
+      <dt>Linha digitável</dt><dd class="mono">{{ cob.linha_digitavel|default:"—" }}</dd>
+      <dt>PDF</dt><dd>{% if cob.pdf %}<a href="{% url 'arquivo_boleto' cob.pk %}" target="_blank">abrir boleto</a> <span class="muted small">{{ cob.pdf_nome_original }}</span>{% else %}<span class="badge alerta">sem PDF — envio automático não acontecerá</span>{% endif %}</dd>
+      <dt>Custo sistema</dt><dd>{{ cob.custo_sistema|brl }}</dd>
+      <dt>Sua parte</dt><dd><strong style="color:var(--ok)">{{ cob.parte_titular|brl }}</strong> ({{ cob.percentual_titular|floatformat:0 }}% do líquido)</dd>
+      <dt>Parte do sócio</dt><dd>{{ cob.parte_socio|brl }}</dd>
+      {% if repasse %}<dt>Repasse</dt><dd><span class="badge {{ repasse.situacao|cor }}">{{ repasse.situacao }}</span> {{ repasse.repassado|brl }} de {{ repasse.devido|brl }}</dd>{% endif %}
+    </dl>
+  </div>
+  <div class="card">
+    <h2>WhatsApp</h2>
+    <dl class="dados mb">
+      <dt>Boleto (D-{{ cfg_global.dias_antes_vencimento }})</dt><dd>{% if boleto_enviado %}<span class="badge ok">enviado</span>{% elif cob.aberta and cob.dias_atraso %}<span class="badge alerta">não enviado</span>{% elif cob.aberta %}<span class="badge neutro">agendado</span>{% else %}—{% endif %}</dd>
+      <dt>Lembrete (D+{{ cfg_global.dias_apos_vencimento }})</dt><dd>{% if atraso_enviado %}<span class="badge ok">enviado</span>{% elif cob.aberta %}<span class="badge neutro">se não pagar</span>{% else %}—{% endif %}</dd>
+    </dl>
+    {% if cob.aberta %}
+    <div class="acoes" style="display:flex;gap:8px;flex-wrap:wrap">
+      <form method="post" action="{% url 'cobranca_enviar' cob.pk %}" data-confirma="Enviar o boleto agora pelo WhatsApp?">{% csrf_token %}<input type="hidden" name="tipo" value="boleto"><button class="btn prim" {% if not cob.pdf %}disabled{% endif %}>Enviar boleto agora</button></form>
+      <form method="post" action="{% url 'cobranca_enviar' cob.pk %}" data-confirma="Enviar lembrete de atraso agora?">{% csrf_token %}<input type="hidden" name="tipo" value="atraso"><button class="btn" {% if not cob.pdf %}disabled{% endif %}>Enviar lembrete de atraso</button></form>
+      {% if wa_link %}<a class="btn" href="{{ wa_link }}" target="_blank" rel="noopener" title="Abre o WhatsApp com o texto pronto (anexe o PDF manualmente)">Abrir no WhatsApp</a>{% endif %}
+    </div>
+    <details class="mt"><summary>Pausar lembretes</summary>
+      <form method="post" action="{% url 'cobranca_pausar' cob.pk %}" class="filtros">{% csrf_token %}<input class="input" type="number" name="dias" value="5" min="1" max="60" style="flex:0 1 90px"><span class="small">dias</span><button class="btn peq">Pausar</button></form></details>
+    {% endif %}
+  </div>
+</div>
+
+{% if cob.aberta %}
+<div class="card mb">
+  <h2>Confirmar pagamento</h2>
+  <p class="small muted">Só confirme depois que o <strong>sócio verificar que o boleto compensou</strong> na conta dele. Comprovante enviado pelo cliente não é confirmação.</p>
+  <form method="post" action="{% url 'cobranca_confirmar' cob.pk %}">{% csrf_token %}
+    <div class="form-grid">{% for f in form_pag %}{% if f.name != 'ciente' %}{% include "core/_campo.html" %}{% endif %}{% endfor %}</div>
+    {% include "core/_campo.html" with f=form_pag.ciente %}
+    <button class="btn ok">✓ Confirmar pagamento</button>
+  </form>
+</div>
+{% elif cob.status == 'paga' %}
+<div class="card mb">
+  <h2>Pagamento confirmado</h2>
+  <dl class="dados">
+    <dt>Pago em</dt><dd>{{ cob.pago_em|date:"d/m/Y" }}</dd><dt>Valor pago</dt><dd>{{ cob.valor_pago|brl }}</dd>
+    <dt>Confirmação</dt><dd>{{ cob.get_confirmacao_fonte_display }}</dd>
+    <dt>Registrado por</dt><dd>{{ cob.confirmado_por|default:"link do sócio" }} em {{ cob.confirmado_em|date:"d/m/Y H:i" }}</dd>
+    {% if cob.confirmacao_obs %}<dt>Obs.</dt><dd>{{ cob.confirmacao_obs }}</dd>{% endif %}
+  </dl>
+  <details class="mt"><summary>Desfazer confirmação</summary>
+    <form method="post" action="{% url 'cobranca_desfazer' cob.pk %}" class="filtros" data-confirma="Desfazer a confirmação? O crédito na conta do sócio será removido.">{% csrf_token %}<input class="input" name="motivo" placeholder="Motivo (obrigatório)" required><button class="btn perigo">Desfazer</button></form></details>
+</div>
+{% endif %}
+
+<div class="grid g2 mb">
+  <div class="card"><h2>Comprovantes</h2>
+    {% if comprovantes %}<ul class="lista">{% for c in comprovantes %}<li><a href="{% url 'arquivo_comprovante' c.pk %}" target="_blank">{{ c.recebido_em|date:"d/m/Y H:i" }} — {{ c.get_origem_display }}</a></li>{% endfor %}</ul>{% else %}<div class="vazio">Nenhum.</div>{% endif %}
+    {% if cob.aberta %}<details class="mt"><summary>Anexar comprovante</summary>
+    <form method="post" enctype="multipart/form-data" action="{% url 'cliente_comprovante' cob.cliente.pk %}">{% csrf_token %}<input type="hidden" name="cobranca" value="{{ cob.pk }}"><input type="hidden" name="next" value="{{ request.path }}">
+      {% for f in comp_form %}{% include "core/_campo.html" %}{% endfor %}<button class="btn">Anexar</button></form></details>{% endif %}
+  </div>
+  <div class="card"><h2>Histórico de mensagens</h2>
+    {% if mensagens %}<ul class="lista">{% for m in mensagens %}<li><div><div class="t">{{ m.get_tipo_display }}{% if m.automatica %} <span class="muted small">(automática)</span>{% endif %}</div><div class="s">{{ m.criado_em|date:"d/m/Y H:i" }}{% if m.enviada_por %} · {{ m.enviada_por }}{% endif %}{% if m.erro %} · <span style="color:var(--perigo)">{{ m.erro|truncatechars:120 }}</span>{% endif %}</div></div><span class="badge {{ m.status|cor }}">{{ m.get_status_display }}</span></li>{% endfor %}</ul>{% else %}<div class="vazio">Nenhuma mensagem enviada.</div>{% endif %}
+  </div>
+</div>
+<div class="card">
+  {% if cob.status == 'cancelada' %}
+  <form method="post" action="{% url 'cobranca_reabrir' cob.pk %}">{% csrf_token %}<button class="btn">Reabrir cobrança</button></form>
+  {% elif cob.aberta %}
+  <details><summary>Cancelar cobrança</summary>
+  <form method="post" action="{% url 'cobranca_cancelar' cob.pk %}" class="filtros" data-confirma="Cancelar esta cobrança? Nenhuma mensagem será enviada.">{% csrf_token %}<input class="input" name="motivo" placeholder="Motivo (obrigatório)" required><button class="btn perigo">Cancelar cobrança</button></form></details>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,12 @@
+Django>=5.1,<5.2
+pypdf>=5.0
+pyotp>=2.9
+qrcode[pil]>=7.4
+requests>=2.32
+python-dotenv>=1.0
+gunicorn>=22.0
+whitenoise>=6.7
+dj-database-url>=2.2
+psycopg[binary]>=3.2
+# apenas para os testes automatizados
+reportlab>=4.2

@@ -1,0 +1,63 @@
+{% extends "core/base.html" %}{% load fmt %}
+{% block titulo %}Painel{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div><h1>Painel</h1><div class="muted small">{{ p.hoje|date:"l, d \d\e F \d\e Y" }}</div></div>
+  <div class="acoes"><a class="btn" href="{% url 'importar' %}">⬆ Importar boletos</a><a class="btn prim" href="{% url 'cliente_novo' %}">+ Cliente</a></div>
+</div>
+{% if simulacao %}<div class="aviso">⚠ WhatsApp em <strong>modo simulação</strong>: as mensagens são registradas mas não enviadas. Configure as credenciais da API oficial em <code>.env</code> (veja Configurações).</div>{% endif %}
+
+<div class="grid g4 kpis mb">
+  <div class="card kpi"><span class="rot">Mensalidades de {{ p.competencia|date:"F" }}</span><span class="val">{{ p.mes.total|brl }}</span><span class="sub">{{ p.mes.qtd }} cobranças</span></div>
+  <div class="card kpi"><span class="rot">Recebido no mês</span><span class="val" style="color:var(--ok)">{{ p.mes.recebido|brl }}</span><span class="sub">{{ p.mes.qtd_pagas }} pagas e confirmadas</span></div>
+  <div class="card kpi"><span class="rot">Pendente no mês</span><span class="val" style="color:var(--alerta)">{{ p.mes.pendente|brl }}</span><span class="sub">{{ p.mes.qtd_abertas }} em aberto</span></div>
+  <a class="card kpi destaque" href="{% url 'socio' %}" style="text-decoration:none"><span class="rot">Sócio te deve</span><span class="val">{{ p.saldo_socio|brl }}</span><span class="sub">PIX recebidos no mês: {{ p.pix_mes|brl }}</span></a>
+</div>
+<div class="grid g4 kpis mb">
+  <a class="card kpi" href="{% url 'clientes' %}" style="text-decoration:none;color:inherit"><span class="rot">Clientes ativos</span><span class="val">{{ p.clientes_ativos }}</span><span class="sub">{{ p.clientes_bloqueados }} bloqueado(s) no portal</span></a>
+  <a class="card kpi" href="{% url 'cobrancas' %}?status=vencida" style="text-decoration:none;color:inherit"><span class="rot">Vencidos</span><span class="val" style="color:var(--perigo)">{{ p.qtd_vencidas }}</span><span class="sub">{{ p.valor_vencido|brl }} · {{ p.inadimplentes }} cliente(s)</span></a>
+  <a class="card kpi" href="{% url 'cobrancas' %}?status=informado" style="text-decoration:none;color:inherit"><span class="rot">Aguardando confirmação</span><span class="val">{{ p.informados }}</span><span class="sub">comprovante recebido</span></a>
+  <a class="card kpi" href="{% url 'mensagens' %}" style="text-decoration:none;color:inherit"><span class="rot">Mensagens no mês</span><span class="val">{{ p.msgs_mes }}</span><span class="sub">{% if p.msgs_falha %}<span style="color:var(--perigo)">{{ p.msgs_falha }} falha(s)</span>{% else %}sem falhas{% endif %}</span></a>
+</div>
+
+<div class="grid g2 mb">
+  <div class="card">
+    <h2>Vencem nos próximos 7 dias <span class="muted small">({{ p.qtd_proximas }})</span></h2>
+    {% if p.proximas %}<ul class="lista">{% for c in p.proximas %}
+      <li><div><a class="t" href="{% url 'cobranca_detalhe' c.pk %}">{{ c.cliente }}</a><div class="s">{{ c.vencimento|date:"d/m (D)" }} · {{ c.valor|brl }}</div></div>
+      <span class="badge {{ c.status|cor }}">{{ c.get_status_display }}</span></li>{% endfor %}</ul>
+    {% else %}<div class="vazio">Nada vencendo nos próximos dias.</div>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Vencidos <span class="muted small">({{ p.qtd_vencidas }})</span></h2>
+    {% if p.vencidas %}<ul class="lista">{% for c in p.vencidas %}
+      <li><div><a class="t" href="{% url 'cobranca_detalhe' c.pk %}">{{ c.cliente }}</a><div class="s">venceu {{ c.vencimento|date:"d/m" }} · {{ c.dias_atraso }} dia(s) · {{ c.valor|brl }}</div></div>
+      <span class="badge {{ c.status|cor }}">{{ c.get_status_display }}</span></li>{% endfor %}</ul>
+    {% else %}<div class="vazio">Nenhum boleto vencido. 🎉</div>{% endif %}
+  </div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <div class="cab" style="margin-bottom:6px"><h2 style="margin:0">Faturamento (6 meses)</h2>
+    <div class="legenda"><span><i style="background:var(--primary-soft)"></i>Previsto</span><span><i style="background:var(--primary)"></i>Recebido</span></div></div>
+    <div class="barras">{% for s in p.serie %}
+      <div class="col" title="{{ s.comp|date:'m/Y' }} — previsto {{ s.previsto|brl }}, recebido {{ s.recebido|brl }}">
+        <div class="pilha"><div class="prev" style="height:{{ s.pct_prev }}%"></div><div class="rec" style="height:{{ s.pct_rec }}%"></div></div>
+        <span class="rot">{{ s.comp|date:"M" }}</span></div>{% endfor %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="cab" style="margin-bottom:6px"><h2 style="margin:0">Próximas tarefas</h2><a class="small" href="{% url 'tarefas' %}">ver todas ({{ p.qtd_tarefas }})</a></div>
+    {% if p.tarefas %}<ul class="lista">{% for t in p.tarefas %}
+      <li><div><div class="t">{{ t.titulo }}</div><div class="s">{{ t.get_tipo_display }}{% if t.prazo %} · prazo {{ t.prazo|date:"d/m" }}{% endif %}</div></div>
+      <form method="post" action="{% url 'tarefa_concluir' t.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{% url 'painel' %}"><button class="btn peq" title="Concluir">✓</button></form></li>{% endfor %}</ul>
+    {% else %}<div class="vazio">Sem tarefas pendentes.</div>{% endif %}
+  </div>
+</div>
+<div class="grid g3 mt">
+  <div class="card kpi"><span class="rot">Sua parte prevista ({{ p.competencia|date:"F" }})</span><span class="val">{{ p.mes.minha_parte_total|brl }}</span></div>
+  <div class="card kpi"><span class="rot">Sua parte já confirmada</span><span class="val">{{ p.mes.minha_parte_recebida|brl }}</span></div>
+  <div class="card kpi"><span class="rot">Custo de sistema no mês</span><span class="val">{{ p.mes.custo_total|brl }}</span></div>
+</div>
+{% endblock %}

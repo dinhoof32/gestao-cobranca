@@ -1,0 +1,16 @@
+# Sobe o sistema web + o agendador (régua de cobrança a cada 30 min e backup diário às 02h).
+# Coloque um proxy com HTTPS na frente (Caddy/Nginx/Cloudflare): a Meta exige HTTPS no webhook.
+services:
+  web:
+    build: .
+    env_file: .env
+    volumes: ["./dados:/app/dados"]
+    ports: ["127.0.0.1:8000:8000"]
+    restart: unless-stopped
+  agendador:
+    build: .
+    env_file: .env
+    volumes: ["./dados:/app/dados"]
+    command: python manage.py agendador
+    depends_on: [web]
+    restart: unless-stopped

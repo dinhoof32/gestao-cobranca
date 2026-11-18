@@ -1,0 +1,18 @@
+{% extends "core/base.html" %}
+{% block titulo %}Tarefas{% endblock %}
+{% block conteudo %}
+<div class="cab"><h1>Tarefas e notificações</h1></div>
+<div class="abas"><a href="?ver=abertas" class="{% if ver == 'abertas' %}ativo{% endif %}">Abertas</a><a href="?ver=concluidas" class="{% if ver == 'concluidas' %}ativo{% endif %}">Concluídas</a></div>
+<div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+<div class="card">
+  {% if tarefas %}<ul class="lista">{% for t in tarefas %}
+  <li><div><div class="t">{% if t.cobranca %}<a href="{% url 'cobranca_detalhe' t.cobranca.pk %}">{{ t.titulo }}</a>{% elif t.cliente %}<a href="{% url 'cliente_detalhe' t.cliente.pk %}">{{ t.titulo }}</a>{% else %}{{ t.titulo }}{% endif %}</div>
+  <div class="s">{{ t.get_tipo_display }}{% if t.prazo %} · prazo <span {% if t.prazo < hoje and not t.concluida %}style="color:var(--perigo)"{% endif %}>{{ t.prazo|date:"d/m/Y" }}</span>{% endif %}{% if t.concluida %} · concluída por {{ t.concluida_por|default:"sistema" }} em {{ t.concluida_em|date:"d/m H:i" }}{% endif %}</div></div>
+  <form method="post" action="{% url 'tarefa_concluir' t.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn peq">{% if t.concluida %}Reabrir{% else %}✓ Concluir{% endif %}</button></form></li>
+  {% endfor %}</ul>{% else %}<div class="vazio">Nada por aqui.</div>{% endif %}
+</div>
+<div class="card"><h2>Nova tarefa</h2><form method="post">{% csrf_token %}{% for f in form %}{% include "core/_campo.html" %}{% endfor %}<button class="btn prim">Criar</button></form>
+<p class="small muted">Concluir uma tarefa de "liberar/bloquear no portal" atualiza automaticamente a situação do cliente.</p></div>
+</div>
+<style>@media(max-width:900px){.grid[style]{grid-template-columns:1fr!important}}</style>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "core/base.html" %}{% load fmt %}
+{% block titulo %}Conta com o sócio{% endblock %}
+{% block conteudo %}
+<div class="cab"><h1>Conta corrente com {{ cfg.nome_socio }}</h1><a class="btn" href="{% url 'socio_extrato' %}?{% if inicio %}inicio={{ inicio|date:'Y-m-d' }}{% endif %}{% if fim %}&fim={{ fim|date:'Y-m-d' }}{% endif %}">📄 Extrato de conferência</a></div>
+<div class="grid g3 mb">
+  <div class="card kpi destaque"><span class="rot">Saldo a receber do sócio</span><span class="val">{{ saldo|brl }}</span><span class="sub">sua parte das mensalidades confirmadas − PIX recebidos</span></div>
+  <div class="card kpi"><span class="rot">Mensalidades com repasse pendente</span><span class="val">{{ pendentes|length }}</span><span class="sub">distribuição automática pela ordem de pagamento</span></div>
+  <div class="card kpi"><span class="rot">Aguardando confirmação do sócio</span><span class="val">{{ aguardando }}</span><span class="sub">clientes que enviaram comprovante</span></div>
+</div>
+<div class="grid g2 mb">
+  <div class="card"><h2>Registrar PIX recebido</h2>
+    <form method="post" enctype="multipart/form-data" action="{% url 'socio_pix' %}">{% csrf_token %}
+      <div class="form-grid">{% for f in pix_form %}{% include "core/_campo.html" %}{% endfor %}</div>
+      <button class="btn prim">Registrar PIX</button></form>
+    <details class="mt"><summary>Lançar ajuste manual</summary>
+      <form method="post" action="{% url 'socio_ajuste' %}">{% csrf_token %}{% for f in ajuste_form %}{% include "core/_campo.html" %}{% endfor %}<button class="btn">Lançar ajuste</button></form></details>
+  </div>
+  <div class="card"><h2>Link de conferência do sócio</h2>
+    <p class="small muted">Página simples, que abre no celular, sem login. Mostra os boletos vencidos ou a vencer e os comprovantes enviados pelos clientes. O sócio toca em <strong>"Compensou"</strong> quando o pagamento cai na conta dele, e o sistema dá a baixa, lança sua parte e cria a tarefa de liberar o cliente no portal.</p>
+    {% if link_socio and cfg.socio_link_ativo %}
+      <input class="input mono" readonly value="{{ link_socio }}" onclick="this.select()">
+      <div class="filtros mt">
+        <button class="btn peq" type="button" onclick="navigator.clipboard.writeText('{{ link_socio }}');this.textContent='Copiado!'">Copiar link</button>
+        <form method="post" action="{% url 'socio_link' %}" data-confirma="Gerar novo link? O atual deixará de funcionar.">{% csrf_token %}<input type="hidden" name="acao" value="gerar"><button class="btn peq">Gerar novo</button></form>
+        <form method="post" action="{% url 'socio_link' %}">{% csrf_token %}<input type="hidden" name="acao" value="desativar"><button class="btn peq perigo">Desativar</button></form>
+      </div>
+      <p class="small muted">Quem tiver esse link consegue confirmar pagamentos. Envie somente ao sócio e gere um novo se ele vazar.</p>
+    {% else %}
+      <form method="post" action="{% url 'socio_link' %}">{% csrf_token %}<input type="hidden" name="acao" value="gerar"><button class="btn prim">Gerar link do sócio</button></form>
+    {% endif %}
+  </div>
+</div>
+{% if pendentes %}
+<div class="card mb"><h2>Repasses pendentes (sua parte ainda não coberta pelos PIX)</h2>
+  <div class="tabela-wrap"><table class="resp"><thead><tr><th>Cliente</th><th>Comp.</th><th>Pago em</th><th class="num">Sua parte</th><th class="num">Já repassado</th><th class="num">Falta</th></tr></thead><tbody>
+  {% for c in pendentes %}<tr><td data-l="Cliente"><a href="{% url 'cobranca_detalhe' c.pk %}">{{ c.cliente }}</a></td><td data-l="Comp.">{{ c.competencia|date:"m/Y" }}</td><td data-l="Pago em">{{ c.pago_em|date:"d/m/Y" }}</td><td data-l="Sua parte" class="num">{{ c.repasse.devido|brl }}</td><td data-l="Repassado" class="num">{{ c.repasse.repassado|brl }}</td><td data-l="Falta" class="num"><strong>{{ c.repasse.pendente|brl }}</strong></td></tr>{% endfor %}
+  </tbody></table></div></div>
+{% endif %}
+<div class="card">
+  <div class="cab" style="margin-bottom:8px"><h2 style="margin:0">Extrato</h2>
+  <form class="filtros" method="get"><input class="input" type="date" name="inicio" value="{{ inicio|date:'Y-m-d' }}"><input class="input" type="date" name="fim" value="{{ fim|date:'Y-m-d' }}"><button class="btn peq">Filtrar</button></form></div>
+  <div class="tabela-wrap"><table class="resp"><thead><tr><th>Data</th><th>Lançamento</th><th class="num">Crédito</th><th class="num">PIX / débito</th><th class="num">Saldo</th><th></th></tr></thead><tbody>
+  <tr><td data-l="Data"></td><td data-l="Lançamento" class="muted">Saldo anterior</td><td></td><td></td><td data-l="Saldo" class="num">{{ anterior|brl }}</td><td></td></tr>
+  {% for it in linhas %}{% with l=it.l %}
+  <tr><td data-l="Data">{{ l.data|date:"d/m/Y" }}</td>
+  <td data-l="Lançamento">{% if l.cobranca %}<a href="{% url 'cobranca_detalhe' l.cobranca_id %}">{{ l.descricao }}</a>{% else %}{{ l.descricao|default:l.get_tipo_display }}{% endif %} <span class="badge {% if l.tipo == 'pix' %}ok{% elif l.tipo == 'ajuste' %}alerta{% else %}info{% endif %}">{{ l.get_tipo_display }}</span>{% if l.comprovante %} <a class="small" href="{% url 'arquivo_pix' l.pk %}" target="_blank">comprovante</a>{% endif %}</td>
+  <td data-l="Crédito" class="num">{% if l.efeito > 0 %}{{ l.efeito|brl }}{% endif %}</td>
+  <td data-l="Débito" class="num">{% if l.efeito < 0 %}{{ l.efeito|abs_|brl }}{% endif %}</td>
+  <td data-l="Saldo" class="num"><strong>{{ it.saldo|brl }}</strong></td>
+  <td>{% if l.tipo != 'credito' %}<form method="post" action="{% url 'socio_excluir' l.pk %}" data-confirma="Excluir este lançamento?">{% csrf_token %}<button class="btn peq perigo" title="Excluir">✕</button></form>{% endif %}</td></tr>
+  {% endwith %}{% empty %}<tr><td colspan="6" class="vazio">Sem lançamentos no período.</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

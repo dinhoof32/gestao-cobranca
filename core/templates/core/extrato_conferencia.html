@@ -1,0 +1,15 @@
+{% extends "core/base.html" %}{% load fmt %}
+{% block titulo %}Extrato de conferência{% endblock %}
+{% block conteudo %}
+<div class="cab no-print"><h1>Extrato de conferência</h1><div class="acoes"><button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('txt').value);this.textContent='Copiado!'">Copiar texto (WhatsApp)</button><button class="btn prim" onclick="print()">Imprimir / PDF</button></div></div>
+<div class="card mb">
+  <h2>{{ cfg.nome_empresa }} — Repasses de {{ cfg.nome_socio }}</h2>
+  <p class="muted small">Período: {{ inicio|date:"d/m/Y" }} a {% if fim %}{{ fim|date:"d/m/Y" }}{% else %}hoje{% endif %}</p>
+  <div class="tabela-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th class="num">Valor</th><th class="num">Saldo</th></tr></thead><tbody>
+  <tr><td></td><td>Saldo anterior</td><td></td><td class="num">{{ anterior|brl }}</td></tr>
+  {% for it in linhas %}<tr><td>{{ it.l.data|date:"d/m/Y" }}</td><td>{{ it.l.descricao|default:it.l.get_tipo_display }}</td><td class="num">{% if it.l.efeito < 0 %}− {{ it.l.efeito|abs_|brl }}{% else %}+ {{ it.l.efeito|brl }}{% endif %}</td><td class="num">{{ it.saldo|brl }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  <h2 class="mt">Saldo a receber: {{ final|brl }}</h2>
+</div>
+<div class="card no-print"><h3>Texto para enviar</h3><textarea id="txt" class="input mono" rows="12" readonly>{{ texto }}</textarea></div>
+{% endblock %}

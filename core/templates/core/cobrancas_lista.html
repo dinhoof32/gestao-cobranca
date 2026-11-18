@@ -1,0 +1,28 @@
+{% extends "core/base.html" %}{% load fmt %}
+{% block titulo %}Cobranças{% endblock %}
+{% block conteudo %}
+<div class="cab"><h1>Cobranças</h1><div class="acoes"><a class="btn" href="{% url 'cobranca_nova' %}">+ Manual</a><a class="btn prim" href="{% url 'importar' %}">⬆ Importar boletos</a></div></div>
+<div class="card">
+  <form class="filtros mb" method="get">
+    <input class="input" name="q" value="{{ q }}" placeholder="Cliente ou linha digitável">
+    <input class="input" type="month" name="mes" value="{{ mes }}" style="flex:0 1 170px">
+    <select class="input" name="status" style="flex:0 1 200px">
+      <option value="">Todos os status</option>
+      <option value="abertas" {% if status == 'abertas' %}selected{% endif %}>Em aberto</option>
+      {% for v,l in status_choices %}<option value="{{ v }}" {% if status == v %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
+    <button class="btn">Filtrar</button>
+  </form>
+  <div class="tabela-wrap"><table class="resp">
+    <thead><tr><th>Cliente</th><th>Comp.</th><th>Vencimento</th><th class="num">Valor</th><th class="num">Sua parte</th><th>Status</th><th>PDF</th></tr></thead>
+    <tbody>{% for c in cobrancas %}
+    <tr><td data-l="Cliente"><a href="{% url 'cobranca_detalhe' c.pk %}"><strong>{{ c.cliente }}</strong></a>{% if c.leitura_alerta %} <span title="{{ c.leitura_alerta }}">⚠</span>{% endif %}</td>
+    <td data-l="Competência">{{ c.competencia|date:"m/Y" }}</td>
+    <td data-l="Vencimento" class="nowrap">{{ c.vencimento|date:"d/m/Y" }}{% if c.dias_atraso %} <span class="muted small">({{ c.dias_atraso }}d)</span>{% endif %}</td>
+    <td data-l="Valor" class="num">{{ c.valor|brl }}</td><td data-l="Sua parte" class="num">{{ c.parte_titular|brl }}</td>
+    <td data-l="Status"><span class="badge {{ c.status|cor }}">{{ c.get_status_display }}</span></td>
+    <td data-l="PDF">{% if c.pdf %}<a href="{% url 'arquivo_boleto' c.pk %}" target="_blank">abrir</a>{% else %}<span class="badge alerta">faltando</span>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="7" class="vazio">Nenhuma cobrança encontrada.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "core/base.html" %}{% load fmt %}
+{% block titulo %}WhatsApp{% endblock %}
+{% block conteudo %}
+<div class="cab"><h1>Mensagens do WhatsApp</h1></div>
+<div class="abas"><a href="?" class="{% if not tipo %}ativo{% endif %}">Todas</a>{% for v,l in tipos %}<a href="?tipo={{ v }}" class="{% if tipo == v %}ativo{% endif %}">{{ l }}</a>{% endfor %}<a href="?tipo=falhas" class="{% if tipo == 'falhas' %}ativo{% endif %}">Falhas</a></div>
+<div class="card">
+  <div class="tabela-wrap"><table class="resp"><thead><tr><th>Data</th><th>Cliente</th><th>Tipo</th><th>Conteúdo</th><th>Status</th></tr></thead><tbody>
+  {% for m in pagina %}<tr><td data-l="Data" class="nowrap">{{ m.criado_em|date:"d/m/Y H:i" }}</td>
+  <td data-l="Cliente">{% if m.cliente %}<a href="{% url 'conversa' m.cliente.pk %}">{{ m.cliente }}</a>{% else %}{{ m.telefone }}{% endif %}</td>
+  <td data-l="Tipo">{{ m.get_tipo_display }}{% if m.automatica %} <span class="muted small">auto</span>{% endif %}</td>
+  <td data-l="Conteúdo" class="small">{{ m.conteudo|truncatechars:90 }}{% if m.erro %}<div style="color:var(--perigo)">{{ m.erro|truncatechars:140 }}</div>{% endif %}</td>
+  <td data-l="Status"><span class="badge {{ m.status|cor }}">{{ m.get_status_display }}</span></td></tr>
+  {% empty %}<tr><td colspan="5" class="vazio">Nenhuma mensagem.</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% if pagina.has_other_pages %}<div class="filtros mt">{% if pagina.has_previous %}<a class="btn peq" href="?tipo={{ tipo }}&p={{ pagina.previous_page_number }}">← Anteriores</a>{% endif %}<span class="small muted">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>{% if pagina.has_next %}<a class="btn peq" href="?tipo={{ tipo }}&p={{ pagina.next_page_number }}">Próximas →</a>{% endif %}</div>{% endif %}
+</div>
+{% endblock %}

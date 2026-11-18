@@ -1,0 +1,30 @@
+{% extends "core/base.html" %}{% load fmt %}
+{% block titulo %}Clientes{% endblock %}
+{% block conteudo %}
+<div class="cab"><h1>Clientes</h1><a class="btn prim" href="{% url 'cliente_novo' %}">+ Novo cliente</a></div>
+<div class="card">
+  <form class="filtros mb" method="get">
+    <input class="input" name="q" value="{{ q }}" placeholder="Buscar por nome, CPF/CNPJ ou WhatsApp">
+    <select class="input" name="f" onchange="this.form.submit()" style="flex:0 1 180px">
+      <option value="ativos" {% if f == 'ativos' %}selected{% endif %}>Ativos</option>
+      <option value="inadimplentes" {% if f == 'inadimplentes' %}selected{% endif %}>Inadimplentes</option>
+      <option value="bloqueados" {% if f == 'bloqueados' %}selected{% endif %}>Bloqueados no portal</option>
+      <option value="inativos" {% if f == 'inativos' %}selected{% endif %}>Inativos</option>
+      <option value="todos" {% if f == 'todos' %}selected{% endif %}>Todos</option>
+    </select>
+    <button class="btn">Filtrar</button>
+  </form>
+  <div class="tabela-wrap"><table class="resp">
+    <thead><tr><th>Cliente</th><th>WhatsApp</th><th class="num">Mensalidade</th><th class="num">Sua parte</th><th>Venc.</th><th>Portal</th><th>Em aberto</th></tr></thead>
+    <tbody>{% for c in clientes %}
+      <tr><td data-l="Cliente"><a href="{% url 'cliente_detalhe' c.pk %}"><strong>{{ c.nome }}</strong></a>{% if not c.ativo %} <span class="badge neutro">inativo</span>{% endif %}{% if not c.envio_automatico %} <span class="badge neutro" title="Envio automático desligado">manual</span>{% endif %}</td>
+      <td data-l="WhatsApp" class="nowrap">{{ c.whatsapp|default:"—" }}</td>
+      <td data-l="Mensalidade" class="num">{{ c.mensalidade|brl }}</td>
+      <td data-l="Sua parte" class="num">{% with p=c.calcular_partes %}{{ p.0|brl }}{% endwith %}</td>
+      <td data-l="Vencimento">dia {{ c.dia_vencimento }}</td>
+      <td data-l="Portal"><span class="badge {{ c.situacao_licenca|cor }}">{{ c.get_situacao_licenca_display }}</span></td>
+      <td data-l="Em aberto">{% if c.vencidas %}<span class="badge perigo">{{ c.vencidas }} vencida(s)</span>{% elif c.abertas %}<span class="badge info">{{ c.abertas }}</span>{% else %}<span class="muted">—</span>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="7" class="vazio">Nenhum cliente encontrado.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}

@@ -1,0 +1,5 @@
+.env
+dados/
+staticfiles/
+__pycache__/
+*.pyc

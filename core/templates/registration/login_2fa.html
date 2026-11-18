@@ -1,0 +1,10 @@
+{% load static %}<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Verificação</title><link rel="stylesheet" href="{% static 'core/app.css' %}"></head>
+<body><div class="login-wrap"><div class="card login">
+<div class="marca"><span>G</span>Verificação em duas etapas</div>
+<p class="muted small">Digite o código de 6 dígitos do seu aplicativo autenticador.</p>
+{% for m in messages %}<div class="flash {{ m.tags }}">{{ m }}</div>{% endfor %}
+<form method="post">{% csrf_token %}{% for f in form %}{% include "core/_campo.html" %}{% endfor %}
+<button class="btn prim" style="width:100%;justify-content:center" type="submit">Confirmar</button></form>
+<p class="small"><a href="{% url 'login' %}">← Voltar</a></p>
+</div></div></body></html>

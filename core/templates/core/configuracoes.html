@@ -1,0 +1,29 @@
+{% extends "core/base.html" %}
+{% block titulo %}Configurações{% endblock %}
+{% block conteudo %}
+<div class="cab"><h1>Configurações</h1></div>
+<div class="grid g2">
+<div class="card"><h2>Régua de cobrança e regras</h2>
+  <form method="post">{% csrf_token %}{% for f in form %}{% include "core/_campo.html" %}{% endfor %}<button class="btn prim">Salvar</button></form>
+</div>
+<div>
+  <div class="card mb"><h2>WhatsApp — API oficial (Cloud API)</h2>
+    {% if simulacao %}<div class="aviso">Modo <strong>simulação</strong> ativo: nada é enviado de verdade.</div>{% else %}<div class="flash success">API configurada: envios reais ativos.</div>{% endif %}
+    <dl class="dados">
+      <dt>Token de acesso</dt><dd>{% if wa.token %}✅ configurado{% else %}❌ WHATSAPP_TOKEN{% endif %}</dd>
+      <dt>Phone Number ID</dt><dd>{% if wa.phone %}✅ configurado{% else %}❌ WHATSAPP_PHONE_NUMBER_ID{% endif %}</dd>
+      <dt>App Secret</dt><dd>{% if wa.secret %}✅ configurado{% else %}❌ WHATSAPP_APP_SECRET{% endif %}</dd>
+      <dt>Verify token</dt><dd>{% if wa.verify %}✅ configurado{% else %}❌ WHATSAPP_VERIFY_TOKEN{% endif %}</dd>
+      <dt>Versão da API</dt><dd>{{ wa.versao }}</dd>
+      <dt>URL do webhook</dt><dd class="mono">{{ webhook_url }}</dd>
+    </dl>
+    <p class="small muted">As credenciais ficam no arquivo <code>.env</code> do servidor, nunca no banco. O passo a passo está no README.</p>
+  </div>
+  <div class="card"><h2>Templates para cadastrar na Meta</h2>
+    <p class="small muted">Categoria <strong>Utilidade</strong>, idioma Português (BR), cabeçalho <strong>Documento</strong>. Variáveis: {% templatetag openvariable %}1{% templatetag closevariable %} nome, {% templatetag openvariable %}2{% templatetag closevariable %} competência, {% templatetag openvariable %}3{% templatetag closevariable %} valor, {% templatetag openvariable %}4{% templatetag closevariable %} vencimento, {% templatetag openvariable %}5{% templatetag closevariable %} linha digitável.</p>
+    <h3>{{ cfg_global.template_boleto }}</h3><p class="small" style="background:var(--surface-2);padding:10px;border-radius:8px">{{ exemplo }}</p>
+    <h3>{{ cfg_global.template_atraso }}</h3><p class="small" style="background:var(--surface-2);padding:10px;border-radius:8px">{{ exemplo_atraso }}</p>
+  </div>
+</div>
+</div>
+{% endblock %}

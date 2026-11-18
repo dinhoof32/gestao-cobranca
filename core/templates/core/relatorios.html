@@ -1,0 +1,28 @@
+{% extends "core/base.html" %}{% load fmt %}
+{% block titulo %}Relatórios{% endblock %}
+{% block conteudo %}
+<div class="cab"><h1>Relatório de faturamento</h1>
+<form class="filtros" method="get"><input class="input" type="month" name="mes" value="{{ comp|date:'Y-m' }}"><button class="btn">Ver</button><a class="btn" href="?mes={{ comp|date:'Y-m' }}&csv=1">⬇ CSV (Excel)</a><button class="btn" type="button" onclick="print()">Imprimir</button></form></div>
+<div class="grid g4 kpis mb">
+  <div class="card kpi"><span class="rot">Faturamento previsto</span><span class="val">{{ resumo.total|brl }}</span><span class="sub">{{ resumo.qtd }} cobranças</span></div>
+  <div class="card kpi"><span class="rot">Recebido</span><span class="val" style="color:var(--ok)">{{ resumo.recebido|brl }}</span><span class="sub">{{ resumo.qtd_pagas }} pagas</span></div>
+  <div class="card kpi"><span class="rot">Em aberto</span><span class="val" style="color:var(--alerta)">{{ resumo.pendente|brl }}</span><span class="sub">{{ resumo.qtd_abertas }} cobranças</span></div>
+  <div class="card kpi"><span class="rot">Sua parte (prevista / recebida)</span><span class="val">{{ resumo.minha_parte_total|brl }}</span><span class="sub">recebida: {{ resumo.minha_parte_recebida|brl }}</span></div>
+</div>
+<div class="grid g2 mb">
+  <div class="card"><div class="cab" style="margin-bottom:6px"><h2 style="margin:0">Últimos 12 meses</h2><div class="legenda"><span><i style="background:var(--primary-soft)"></i>Previsto</span><span><i style="background:var(--primary)"></i>Recebido</span></div></div>
+    <div class="barras">{% for s in serie %}<div class="col" title="{{ s.comp|date:'m/Y' }}: previsto {{ s.previsto|brl }} · recebido {{ s.recebido|brl }} · sua parte {{ s.minha|brl }}"><div class="pilha"><div class="prev" style="height:{{ s.pct_prev }}%"></div><div class="rec" style="height:{{ s.pct_rec }}%"></div></div><span class="rot">{{ s.comp|date:"M" }}</span></div>{% endfor %}</div>
+  </div>
+  <div class="card"><h2>Maiores valores em atraso</h2>
+    {% if ranking %}<ul class="lista">{% for c in ranking %}<li><a href="{% url 'cliente_detalhe' c.pk %}">{{ c }}</a><span class="small">{{ c.qtd }} boleto(s) · <strong>{{ c.total|brl }}</strong></span></li>{% endfor %}</ul>{% else %}<div class="vazio">Sem inadimplência.</div>{% endif %}
+    <form class="filtros mt" onsubmit="location.href='/clientes/'+this.c.value+'/';return false"><select class="input" name="c">{% for c in clientes %}<option value="{{ c.pk }}">{{ c }}</option>{% endfor %}</select><button class="btn">Relatório do cliente</button></form>
+  </div>
+</div>
+<div class="card"><h2>Detalhamento — {{ comp|date:"F/Y" }}</h2>
+  <div class="tabela-wrap"><table class="resp"><thead><tr><th>Cliente</th><th>Venc.</th><th class="num">Valor</th><th class="num">Custo</th><th class="num">Sua parte</th><th class="num">Sócio</th><th>Status</th><th>Pago em</th></tr></thead><tbody>
+  {% for c in cobrancas %}<tr><td data-l="Cliente"><a href="{% url 'cobranca_detalhe' c.pk %}">{{ c.cliente }}</a></td><td data-l="Venc.">{{ c.vencimento|date:"d/m" }}</td><td data-l="Valor" class="num">{{ c.valor|brl }}</td><td data-l="Custo" class="num">{{ c.custo_sistema|brl }}</td><td data-l="Sua parte" class="num">{{ c.parte_titular|brl }}</td><td data-l="Sócio" class="num">{{ c.parte_socio|brl }}</td><td data-l="Status"><span class="badge {{ c.status|cor }}">{{ c.get_status_display }}</span></td><td data-l="Pago em">{{ c.pago_em|date:"d/m"|default:"—" }}</td></tr>
+  {% empty %}<tr><td colspan="8" class="vazio">Sem cobranças neste mês.</td></tr>{% endfor %}
+  <tr><td><strong>Total</strong></td><td></td><td class="num"><strong>{{ resumo.total|brl }}</strong></td><td class="num">{{ resumo.custo_total|brl }}</td><td class="num"><strong>{{ resumo.minha_parte_total|brl }}</strong></td><td class="num">{{ resumo.parte_socio_total|brl }}</td><td></td><td></td></tr>
+  </tbody></table></div>
+</div>
+{% endblock %}

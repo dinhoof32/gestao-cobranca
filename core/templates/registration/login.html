@@ -1,0 +1,8 @@
+{% load static %}<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Entrar</title><link rel="stylesheet" href="{% static 'core/app.css' %}"></head>
+<body><div class="login-wrap"><div class="card login">
+<div class="marca"><span>G</span>Gestão de Suporte e Cobrança</div>
+{% for m in messages %}<div class="flash {{ m.tags }}">{{ m }}</div>{% endfor %}
+<form method="post">{% csrf_token %}{% for f in form %}{% include "core/_campo.html" %}{% endfor %}
+<button class="btn prim" style="width:100%;justify-content:center" type="submit">Entrar</button></form>
+</div></div></body></html>

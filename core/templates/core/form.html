@@ -1,0 +1,23 @@
+{% extends "core/base.html" %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block conteudo %}
+<div class="cab"><h1>{{ titulo }}</h1><a class="btn" href="javascript:history.back()">← Voltar</a></div>
+<div class="card" style="max-width:860px">
+<form method="post" {% if multipart %}enctype="multipart/form-data"{% endif %}>{% csrf_token %}
+  {% for e in form.non_field_errors %}<div class="flash error">{{ e }}</div>{% endfor %}
+  <div class="form-grid">{% for f in form %}{% include "core/_campo.html" %}{% endfor %}</div>
+  {% if preview_repasse %}
+  <div class="aviso" id="previa">Sua parte: <strong id="pv-tit">—</strong> · Parte do sócio: <strong id="pv-soc">—</strong></div>
+  {% endif %}
+  <button class="btn prim" type="submit">Salvar</button>
+</form>
+</div>
+{% endblock %}
+{% block scripts %}{% if preview_repasse %}
+<script>
+const g=id=>parseFloat((document.getElementById(id)?.value||'0').replace(',','.'))||0;
+const fmt=v=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+function calc(){const m=g('id_mensalidade'),c=g('id_custo_sistema'),p=g('id_percentual_titular');
+const t=Math.round(Math.max(m-c,0)*p)/100;document.getElementById('pv-tit').textContent=fmt(t);document.getElementById('pv-soc').textContent=fmt(m-t)}
+['id_mensalidade','id_custo_sistema','id_percentual_titular'].forEach(i=>document.getElementById(i)?.addEventListener('input',calc));calc();
+</script>{% endif %}{% endblock %}

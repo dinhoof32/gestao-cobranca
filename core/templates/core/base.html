@@ -1,0 +1,50 @@
+{% load static %}<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block titulo %}Painel{% endblock %} · {{ cfg_global.nome_empresa|default:"Gestão" }}</title>
+<link rel="stylesheet" href="{% static 'core/app.css' %}">
+<meta name="theme-color" content="#0f172a">
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side">
+    <div class="marca"><span>G</span>{{ cfg_global.nome_empresa|truncatechars:22 }}</div>
+    {% with u=request.resolver_match.url_name %}
+    <nav>
+      <a href="{% url 'painel' %}" class="{% if u == 'painel' %}ativo{% endif %}">▦ Painel</a>
+      <div class="sec">Operação</div>
+      <a href="{% url 'clientes' %}" class="{% if 'cliente' in u %}ativo{% endif %}">👥 Clientes</a>
+      <a href="{% url 'cobrancas' %}" class="{% if 'cobranca' in u %}ativo{% endif %}">🧾 Cobranças{% if nav_informados %}<span class="pill" title="Pagamentos informados aguardando confirmação">{{ nav_informados }}</span>{% endif %}</a>
+      <a href="{% url 'importar' %}" class="{% if u == 'importar' %}ativo{% endif %}">⬆ Importar boletos</a>
+      <a href="{% url 'mensagens' %}" class="{% if u == 'mensagens' or u == 'conversa' %}ativo{% endif %}">💬 WhatsApp</a>
+      <a href="{% url 'tarefas' %}" class="{% if u == 'tarefas' %}ativo{% endif %}">✓ Tarefas{% if nav_tarefas %}<span class="pill">{{ nav_tarefas }}</span>{% endif %}</a>
+      <div class="sec">Financeiro</div>
+      <a href="{% url 'socio' %}" class="{% if 'socio' in u %}ativo{% endif %}">⇄ Conta com o sócio</a>
+      <a href="{% url 'relatorios' %}" class="{% if u == 'relatorios' %}ativo{% endif %}">📊 Relatórios</a>
+      <div class="sec">Sistema</div>
+      <a href="{% url 'configuracoes' %}" class="{% if u == 'configuracoes' %}ativo{% endif %}">⚙ Configurações</a>
+      <a href="{% url 'auditoria' %}" class="{% if u == 'auditoria' %}ativo{% endif %}">🛡 Auditoria</a>
+      <a href="{% url 'seguranca' %}" class="{% if u == 'seguranca' %}ativo{% endif %}">🔑 Minha conta</a>
+    </nav>
+    {% endwith %}
+    <div class="rodape">
+      <div class="muted small">{{ request.user.get_full_name|default:request.user.username }}</div>
+      <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Sair →</button></form>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topo"><button type="button" onclick="document.getElementById('side').classList.toggle('aberto')" aria-label="Menu">☰</button><strong>{{ cfg_global.nome_empresa }}</strong></header>
+    <main class="conteudo">
+      {% for m in messages %}<div class="flash {{ m.tags }}">{{ m }}</div>{% endfor %}
+      {% block conteudo %}{% endblock %}
+    </main>
+  </div>
+</div>
+<script>
+document.addEventListener('click',e=>{const s=document.getElementById('side');if(s.classList.contains('aberto')&&!s.contains(e.target)&&!e.target.closest('.topo'))s.classList.remove('aberto')});
+document.querySelectorAll('form[data-confirma]').forEach(f=>f.addEventListener('submit',e=>{if(!confirm(f.dataset.confirma))e.preventDefault()}));
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
